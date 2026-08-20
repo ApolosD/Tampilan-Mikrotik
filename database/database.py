@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS crew (
     mac_address TEXT,
     device TEXT,
     access_point TEXT,
+    profile TEXT,
+    limit_uptime TEXT,
     quota_gb REAL NOT NULL DEFAULT 0,
     used_gb REAL NOT NULL DEFAULT 0,
     bandwidth_down_mbps REAL NOT NULL DEFAULT 0,
@@ -115,6 +117,12 @@ def initialize_database() -> None:
         operator_columns = {row[1] for row in connection.execute("PRAGMA table_info(operators)")}
         if "password_hash" not in operator_columns:
             connection.execute("ALTER TABLE operators ADD COLUMN password_hash TEXT")
+
+        crew_columns = {row[1] for row in connection.execute("PRAGMA table_info(crew)")}
+        if "profile" not in crew_columns:
+            connection.execute("ALTER TABLE crew ADD COLUMN profile TEXT")
+        if "limit_uptime" not in crew_columns:
+            connection.execute("ALTER TABLE crew ADD COLUMN limit_uptime TEXT")
 
 
 def get_active_plan() -> sqlite3.Row:

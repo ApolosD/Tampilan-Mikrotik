@@ -64,6 +64,7 @@ def normalize_hotspot_users(users: list[dict[str, Any]], active_users: list[dict
             "ip_address": active.get("address", user.get("address", "")),
             "mac_address": active.get("mac-address", user.get("mac-address", "")),
             "profile": user.get("profile", ""),
+            "limit_uptime": user.get("limit-uptime", ""),
             "quota_gb": _bytes_to_gb(user.get("limit-bytes-total")),
             "used_gb": max(used_gb, active_used_gb),
             "is_online": username in active_by_user,
@@ -85,9 +86,9 @@ def sync_hotspot_users(snapshot: dict[str, Any]) -> None:
             if existing:
                 quota = item["quota_gb"] if item["quota_gb"] > 0 else existing["quota_gb"]
                 connection.execute(
-                    "UPDATE crew SET name = ?, ip_address = ?, mac_address = ?, used_gb = ?, quota_gb = ?, status = ?, blocked = ? WHERE username = ?",
+                    "UPDATE crew SET name = ?, ip_address = ?, mac_address = ?, profile = ?, limit_uptime = ?, used_gb = ?, quota_gb = ?, status = ?, blocked = ? WHERE username = ?",
                     (
-                        item["name"], item["ip_address"], item["mac_address"], item["used_gb"], quota,
+                        item["name"], item["ip_address"], item["mac_address"], item.get("profile", existing["profile"] if "profile" in existing.keys() else ""), item.get("limit_uptime", existing["limit_uptime"] if "limit_uptime" in existing.keys() else ""), item["used_gb"], quota,
                         "ONLINE" if item["is_online"] else ("SUSPENDED" if item["disabled"] else "OFFLINE"),
                         int(existing["blocked"]), item["username"],
                     ),
@@ -95,8 +96,8 @@ def sync_hotspot_users(snapshot: dict[str, Any]) -> None:
             else:
                 crew_id = "MT-" + re.sub(r"[^A-Za-z0-9_-]", "-", item["username"])[:45]
                 connection.execute(
-                    "INSERT OR IGNORE INTO crew (crew_id, name, username, ip_address, mac_address, quota_gb, used_gb, access_point, status, blocked, payment_package) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (crew_id, item["name"], item["username"], item["ip_address"], item["mac_address"], item["quota_gb"], item["used_gb"], "Unassigned", "ONLINE" if item["is_online"] else "OFFLINE", 0, item["profile"]),
+                    "INSERT OR IGNORE INTO crew (crew_id, name, username, ip_address, mac_address, profile, limit_uptime, quota_gb, used_gb, access_point, status, blocked, payment_package) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (crew_id, item["name"], item["username"], item["ip_address"], item["mac_address"], item.get("profile", ""), item.get("limit_uptime", ""), item["quota_gb"], item["used_gb"], "Unassigned", "ONLINE" if item["is_online"] else "OFFLINE", 0, item.get("profile", "")),
                 )
 
 

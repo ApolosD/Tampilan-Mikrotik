@@ -2,7 +2,7 @@ import streamlit as st
 import re
 
 from database.database import get_active_plan, get_connection
-from mikrotik.actions import create_hotspot_user, delete_hotspot_user, kick_user, list_hotspot_profiles, set_user_blocked
+from mikrotik.actions import create_hotspot_user, delete_hotspot_user, edit_hotspot_user, get_hotspot_user, kick_user, list_hotspot_profiles, set_user_blocked
 from quota.engine import calculate_quota_status
 from utils.formatters import format_gb
 from utils.ui import render_records
@@ -106,6 +106,59 @@ if st.session_state.auth_user["role"] == "ADMIN" and records:
                         st.rerun()
                     except Exception as error:
                         st.error(f"Hapus user gagal: {error}")
+
+            st.markdown("---")
+            st.subheader("Edit user hotspot")
+            try:
+                profiles = list_hotspot_profiles()
+            except Exception:
+                profiles = ["default"]
+
+            user_details = {}
+            try:
+                user_details = get_hotspot_user(selected_user)
+            except Exception:
+                user_details = {}
+
+            with st.form(f"edit_hotspot_user_form_{selected_user}"):
+                current_profile = str(user_details.get("profile", "default") or "default")
+                current_shared_users = int(user_details.get("shared-users", 1) or 1)
+                current_limit_uptime = str(user_details.get("limit-uptime", "") or "")
+                current_comment = str(user_details.get("comment", "") or "")
+
+                new_password = st.text_input("Password baru", type="password", placeholder="Kosongkan jika tidak ingin mengubah")
+                new_profile = st.selectbox("Profile", profiles if profiles else ["default"], index=profiles.index(current_profile) if current_profile in profiles else 0)
+                new_shared_users = st.number_input("Shared users", min_value=1, max_value=20, value=current_shared_users, step=1)
+                new_limit_uptime = st.text_input("Limit uptime", value=current_limit_uptime, placeholder="contoh: 1d 00:00:00")
+                new_comment = st.text_input("Comment", value=current_comment)
+                edit_submitted = st.form_submit_button("Simpan perubahan user", type="primary")
+
+            if edit_submitted:
+                try:
+                    if new_password and len(new_password.strip()) < 4:
+                        st.error("Password hotspot minimal 4 karakter.")
+                    else:
+                        edit_hotspot_user(
+                            selected_user,
+                            password=new_password.strip() if new_password.strip() else None,
+                            profile=new_profile,
+                            shared_users=int(new_shared_users),
+                            limit_uptime=new_limit_uptime,
+                            comment=new_comment,
+                        )
+                        with get_connection() as connection:
+                            connection.execute(
+                                "UPDATE crew SET profile = ?, limit_uptime = ? WHERE username = ?",
+                                (new_profile, new_limit_uptime.strip() if new_limit_uptime.strip() else "", selected_user),
+                            )
+                            connection.execute(
+                                "INSERT INTO system_logs (category, message, operator, created_at) VALUES (?, ?, ?, datetime('now'))",
+                                ("ADMIN ACTION", f"Updated hotspot user {selected_user}", st.session_state.operator),
+                            )
+                        st.success(f"User {selected_user} berhasil diperbarui.")
+                        st.rerun()
+                except Exception as error:
+                    st.error(f"Edit user gagal: {error}")
 
         with create_tab:
             try:

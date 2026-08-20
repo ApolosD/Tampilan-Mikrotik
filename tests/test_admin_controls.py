@@ -1,5 +1,9 @@
+import sqlite3
+
+from database import database
 from database.auth import hash_password, verify_password
 from mikrotik import actions
+from mikrotik.monitoring import sync_hotspot_users
 
 
 class FakePath(list):
@@ -73,6 +77,41 @@ def test_create_hotspot_user_adds_new_routeros_user(monkeypatch):
     actions.create_hotspot_user("new-user", "pass1234", profile="default", shared_users=2)
 
     assert api.paths[("ip", "hotspot", "user")].added == [{"name": "new-user", "password": "pass1234", "profile": "default", "shared-users": "2"}]
+
+
+def test_edit_hotspot_user_updates_existing_routeros_user(monkeypatch):
+    api = FakeApi()
+    monkeypatch.setattr(actions, "open_connection", lambda: FakeConnection(api))
+
+    actions.edit_hotspot_user(
+        "crew01",
+        password="newpass123",
+        profile="vip",
+        shared_users=4,
+        limit_uptime="7d",
+        comment="updated profile",
+    )
+
+    assert api.paths[("ip", "hotspot", "user")].updated == [
+        ("*2", {"password": "newpass123", "profile": "vip", "shared-users": "4", "limit-uptime": "7d", "comment": "updated profile"})
+    ]
+
+
+def test_sync_hotspot_users_updates_local_profile_and_limit_fields(monkeypatch, tmp_path):
+    db_path = tmp_path / "mikrotik_dashboard.db"
+    monkeypatch.setattr(database, "DATABASE_PATH", db_path)
+    database.initialize_database()
+
+    sync_hotspot_users({
+        "connection": {"status": "ONLINE"},
+        "active_users": [{"user": "crew01", "address": "10.0.0.2", "bytes-in": 100, "bytes-out": 100}],
+        "users": [{"name": "crew01", "profile": "vip", "limit-uptime": "7d", "address": "10.0.0.2", "mac-address": "AA:BB:CC:DD:EE:FF"}],
+    })
+
+    with sqlite3.connect(db_path) as connection:
+        row = connection.execute("SELECT profile, limit_uptime FROM crew WHERE username = ?", ("crew01",)).fetchone()
+
+    assert row == ("vip", "7d")
 
 
 def test_delete_hotspot_user_removes_user(monkeypatch):

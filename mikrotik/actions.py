@@ -38,6 +38,20 @@ def list_hotspot_profiles() -> list[str]:
     return names
 
 
+def get_hotspot_user(username: str) -> dict[str, Any]:
+    username = username.strip()
+    if not username:
+        raise ValueError("Username wajib diisi")
+
+    with open_connection() as api:
+        users = api.path("ip", "hotspot", "user")
+        for user in list(users):
+            if str(user.get("name", "")) == username:
+                return dict(user)
+
+    raise RuntimeError(f"User {username} tidak ditemukan di RouterOS")
+
+
 def create_hotspot_user(
     username: str,
     password: str,
@@ -71,6 +85,57 @@ def create_hotspot_user(
         if comment.strip():
             payload["comment"] = comment.strip()
         users.add(**payload)
+
+
+def edit_hotspot_user(
+    username: str,
+    *,
+    password: str | None = None,
+    profile: str | None = None,
+    shared_users: int | None = None,
+    limit_uptime: str | None = None,
+    comment: str | None = None,
+    disabled: bool | None = None,
+) -> None:
+    username = username.strip()
+    if not username:
+        raise ValueError("Username wajib diisi")
+    if shared_users is not None and shared_users < 1:
+        raise ValueError("Shared users minimal 1")
+    if password is not None and len(password.strip()) > 0 and len(password.strip()) < 4:
+        raise ValueError("Password hotspot minimal 4 karakter.")
+
+    with open_connection() as api:
+        users = api.path("ip", "hotspot", "user")
+        for user in list(users):
+            if str(user.get("name", "")) != username:
+                continue
+
+            user_id = user.get(".id") or user.get("id")
+            if not user_id:
+                raise RuntimeError(f"ID RouterOS untuk user {username} tidak ditemukan")
+
+            payload: dict[str, Any] = {}
+            if password is not None and password.strip():
+                payload["password"] = password.strip()
+            if profile is not None:
+                payload["profile"] = (profile or "default").strip() or "default"
+            if shared_users is not None:
+                payload["shared-users"] = str(shared_users)
+            if limit_uptime is not None:
+                payload["limit-uptime"] = limit_uptime.strip() if limit_uptime.strip() else ""
+            if comment is not None:
+                payload["comment"] = comment.strip()
+            if disabled is not None:
+                payload["disabled"] = "yes" if disabled else "no"
+
+            if not payload:
+                return
+
+            users.set(user_id, **payload)
+            return
+
+    raise RuntimeError(f"User {username} tidak ditemukan di RouterOS")
 
 
 def delete_hotspot_user(username: str) -> bool:
