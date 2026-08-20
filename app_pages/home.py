@@ -6,7 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from database.database import get_active_plan, get_connection
-from mikrotik.monitoring import ap_interface_flow, ap_interface_flows, format_memory, get_live_snapshot, interface_flow, record_hotspot_activity, sync_hotspot_users, traffic_mbps
+from mikrotik.monitoring import ap_interface_flow, ap_interface_flows, format_memory, get_live_snapshot, interface_flow, refresh_snapshot_interfaces, traffic_mbps
 from quota.engine import calculate_quota_status
 from utils.formatters import format_gb
 from utils.ui import render_records
@@ -114,16 +114,12 @@ with st.container(border=True):
 
     @st.fragment(run_every="5s")
     def render_ap_traffic() -> None:
-        snapshot = get_live_snapshot()
+        snapshot = st.session_state.get("live_snapshot") or get_live_snapshot()
+        snapshot = refresh_snapshot_interfaces(snapshot)
+        st.session_state.live_snapshot = snapshot
         if snapshot["connection"]["status"] != "ONLINE":
             st.warning("Traffic realtime tersedia setelah koneksi RouterOS aktif.")
             return
-
-        active_users = {str(item.get("user", "")) for item in snapshot["active_users"] if item.get("user")}
-        record_hotspot_activity(st.session_state.get("active_hotspot_users"), active_users)
-        st.session_state.active_hotspot_users = active_users
-        st.session_state.live_snapshot = snapshot
-        sync_hotspot_users(snapshot)
 
         raw_ap_names = [str(item.get("name", "")) for item in snapshot.get("interfaces", []) if str(item.get("name", "")).upper().startswith("AP ")]
         chart_ap_names = raw_ap_names[:3] if raw_ap_names else [flow["name"] for flow in ap_interface_flows(snapshot)[:3]]

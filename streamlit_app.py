@@ -1,4 +1,5 @@
 import streamlit as st
+from time import monotonic
 
 from config.settings import APP_NAME
 from database.auth import authenticate_operator
@@ -8,19 +9,35 @@ from mikrotik.monitoring import get_live_snapshot, record_hotspot_activity, sync
 
 st.set_page_config(page_title=APP_NAME, page_icon=":material/network_check:", layout="wide")
 
-initialize_database()
-seed_database()
+if not st.session_state.get("_db_initialized"):
+    initialize_database()
+    seed_database()
+    st.session_state._db_initialized = True
 
 if "auth_user" not in st.session_state:
     st.session_state.auth_user = {"username": "guest", "display_name": "Guest Viewer", "role": "VIEWER", "active": 1}
     st.session_state.operator = "Guest Viewer"
 
-live_snapshot = get_live_snapshot()
-current_active_users = {str(item.get("user", "")) for item in live_snapshot["active_users"] if item.get("user")}
-record_hotspot_activity(st.session_state.get("active_hotspot_users"), current_active_users)
-st.session_state.active_hotspot_users = current_active_users
-sync_hotspot_users(live_snapshot)
-st.session_state.live_snapshot = live_snapshot
+refresh_interval = 8.0
+sync_interval = 25.0
+now = monotonic()
+last_refresh = st.session_state.get("live_snapshot_last_refresh", 0.0)
+last_sync = st.session_state.get("live_snapshot_last_sync", 0.0)
+
+if "live_snapshot" not in st.session_state or (now - last_refresh) >= refresh_interval:
+    live_snapshot = get_live_snapshot()
+    st.session_state.live_snapshot = live_snapshot
+    st.session_state.live_snapshot_last_refresh = now
+else:
+    live_snapshot = st.session_state.live_snapshot
+
+if live_snapshot["connection"]["status"] == "ONLINE":
+    current_active_users = {str(item.get("user", "")) for item in live_snapshot["active_users"] if item.get("user")}
+    record_hotspot_activity(st.session_state.get("active_hotspot_users"), current_active_users)
+    st.session_state.active_hotspot_users = current_active_users
+    if (now - last_sync) >= sync_interval:
+        sync_hotspot_users(live_snapshot)
+        st.session_state.live_snapshot_last_sync = now
 
 st.markdown(
     """

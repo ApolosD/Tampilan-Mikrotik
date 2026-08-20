@@ -143,6 +143,15 @@ def ap_interface_flows(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
     return sorted(flows, key=lambda flow: flow["name"])
 
 
+def refresh_snapshot_interfaces(snapshot: dict[str, Any]) -> dict[str, Any]:
+    if snapshot.get("connection", {}).get("status") != "ONLINE":
+        return snapshot
+    try:
+        return {**snapshot, "interfaces": query(("interface",))}
+    except Exception as error:
+        return {**snapshot, "connection": {**snapshot.get("connection", {}), "status": "OFFLINE", "error": str(error)}}
+
+
 def _canonical_ap_name(name: str) -> str:
     normalized = re.sub(r"\s+", "", name.upper())
     match = re.fullmatch(r"AP[-_]?0*(\d+)", normalized)
