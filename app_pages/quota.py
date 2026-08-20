@@ -39,12 +39,15 @@ with st.container(border=True):
 
 with st.container(border=True):
     st.subheader("Add quota / top-up")
+    is_admin = st.session_state.auth_user["role"] == "ADMIN"
     with st.form("add_quota"):
-        crew_id = st.selectbox("Crew", [row["crew_id"] for row in rows])
-        amount = st.number_input("Add-on amount (GB)", min_value=1.0, value=10.0, step=1.0)
-        reason = st.text_input("Reason", value="Operational requirement")
-        submitted = st.form_submit_button("Record add-on")
+        crew_id = st.selectbox("Crew", [row["crew_id"] for row in rows], disabled=not is_admin)
+        amount = st.number_input("Add-on amount (GB)", min_value=1.0, value=10.0, step=1.0, disabled=not is_admin)
+        reason = st.text_input("Reason", value="Operational requirement", disabled=not is_admin)
+        submitted = st.form_submit_button("Record add-on", disabled=not is_admin)
     if submitted:
         add_quota(crew_id, amount, reason, st.session_state.operator)
         st.success(f"{amount:g} GB added to {crew_id}. The transaction and audit log were recorded.")
         st.rerun()
+    if not is_admin:
+        st.info("Quota hanya dapat diubah oleh Admin. Role lain memiliki akses read-only.")

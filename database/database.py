@@ -96,7 +96,8 @@ CREATE TABLE IF NOT EXISTS operators (
     username TEXT UNIQUE NOT NULL,
     display_name TEXT NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('ADMIN', 'OPERATOR', 'VIEWER')),
-    active INTEGER NOT NULL DEFAULT 1
+    active INTEGER NOT NULL DEFAULT 1,
+    password_hash TEXT
 );
 """
 
@@ -111,6 +112,9 @@ def get_connection() -> sqlite3.Connection:
 def initialize_database() -> None:
     with get_connection() as connection:
         connection.executescript(SCHEMA)
+        operator_columns = {row[1] for row in connection.execute("PRAGMA table_info(operators)")}
+        if "password_hash" not in operator_columns:
+            connection.execute("ALTER TABLE operators ADD COLUMN password_hash TEXT")
 
 
 def get_active_plan() -> sqlite3.Row:
@@ -119,6 +123,25 @@ def get_active_plan() -> sqlite3.Row:
     if plan is None:
         raise RuntimeError("No internet plan is configured")
     return plan
+
+
+def get_setting(key: str, default: str = "") -> str:
+    with get_connection() as connection:
+        row = connection.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+def set_setting(key: str, value: str) -> None:
+    with get_connection() as connection:
+        connection.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
+
+
+def log_system_event(category: str, message: str, operator: str) -> None:
+    with get_connection() as connection:
+        connection.execute(
+            "INSERT INTO system_logs (category, message, operator, created_at) VALUES (?, ?, ?, datetime('now'))",
+            (category, message, operator),
+        )
 
 
 def set_internet_mode(mode: str) -> None:

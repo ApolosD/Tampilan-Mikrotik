@@ -1,3 +1,4 @@
+from mikrotik import monitoring
 from mikrotik.monitoring import normalize_hotspot_users
 
 
@@ -42,3 +43,21 @@ def test_default_trial_is_excluded_from_hotspot_users():
     result = normalize_hotspot_users(users, [])
 
     assert [item["username"] for item in result] == ["OS1"]
+
+
+def test_ap_flow_accepts_space_alias_and_combines_rates():
+    snapshot = {"interfaces": [{"name": "AP 01", "rx-rate": "1000000", "tx-rate": "2500000"}]}
+
+    flow = monitoring.ap_interface_flow(snapshot, "AP-01")
+
+    assert flow["name"] == "AP 01"
+    assert monitoring.traffic_mbps(flow) == 3.5
+
+
+def test_hotspot_activity_records_login_and_logout(monkeypatch):
+    events = []
+    monkeypatch.setattr(monitoring, "log_system_event", lambda category, message, operator: events.append((category, operator)))
+
+    monitoring.record_hotspot_activity({"crew01"}, {"crew02"})
+
+    assert events == [("HOTSPOT LOGIN", "crew02"), ("HOTSPOT LOGOUT", "crew01")]

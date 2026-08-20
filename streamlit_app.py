@@ -1,15 +1,42 @@
 import streamlit as st
 
 from config.settings import APP_NAME
-from database.database import get_active_plan, initialize_database, set_internet_mode
+from database.auth import authenticate_operator
+from database.database import get_active_plan, initialize_database, log_system_event, set_internet_mode
 from database.seed import seed_database
-from mikrotik.monitoring import get_live_snapshot, sync_hotspot_users
+from mikrotik.monitoring import get_live_snapshot, record_hotspot_activity, sync_hotspot_users
 
 st.set_page_config(page_title=APP_NAME, page_icon=":material/network_check:", layout="wide")
 
 initialize_database()
 seed_database()
+
+
+def render_login() -> None:
+    st.title("Admin portal")
+    st.caption("Login untuk mengakses MikroTik Internet & Crew Management.")
+    with st.form("login_form"):
+        username = st.text_input("Username", autocomplete="username")
+        password = st.text_input("Password", type="password", autocomplete="current-password")
+        submitted = st.form_submit_button("Login", type="primary", use_container_width=True)
+    if submitted:
+        operator = authenticate_operator(username, password)
+        if operator:
+            st.session_state.auth_user = operator
+            st.session_state.operator = operator["username"]
+            log_system_event("AUTH LOGIN", "Login portal berhasil", operator["username"])
+            st.rerun()
+        st.error("Username atau password salah, atau akun tidak aktif.")
+
+
+if "auth_user" not in st.session_state:
+    render_login()
+    st.stop()
+
 live_snapshot = get_live_snapshot()
+current_active_users = {str(item.get("user", "")) for item in live_snapshot["active_users"] if item.get("user")}
+record_hotspot_activity(st.session_state.get("active_hotspot_users"), current_active_users)
+st.session_state.active_hotspot_users = current_active_users
 sync_hotspot_users(live_snapshot)
 st.session_state.live_snapshot = live_snapshot
 
@@ -98,12 +125,19 @@ page = st.navigation(
 
 with st.sidebar:
     st.caption("Internet management system")
+    st.caption(f"Login: {st.session_state.auth_user['display_name']} · {st.session_state.auth_user['role']}")
+    if st.button("Logout", use_container_width=True):
+        log_system_event("AUTH LOGOUT", "Logout portal", st.session_state.auth_user["username"])
+        st.session_state.pop("auth_user", None)
+        st.session_state.pop("operator", None)
+        st.rerun()
     st.divider()
     current_plan = get_active_plan()
     selected_mode = st.segmented_control(
         "Internet mode",
         ["LIMITED", "UNLIMITED"],
         default=current_plan["mode"],
+        disabled=st.session_state.auth_user["role"] != "ADMIN",
     )
     if selected_mode and selected_mode != current_plan["mode"]:
         set_internet_mode(selected_mode)

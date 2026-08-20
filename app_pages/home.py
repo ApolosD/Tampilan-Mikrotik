@@ -1,7 +1,10 @@
+from datetime import datetime
+
+import pandas as pd
 import streamlit as st
 
 from database.database import get_active_plan, get_connection
-from mikrotik.monitoring import format_memory, get_live_snapshot, interface_flow
+from mikrotik.monitoring import ap_interface_flow, format_memory, get_live_snapshot, record_hotspot_activity, sync_hotspot_users, traffic_mbps
 from quota.engine import calculate_quota_status
 from utils.formatters import format_gb
 from utils.ui import render_records
@@ -22,7 +25,8 @@ if live["connection"]["status"] == "ONLINE":
     crew_rows = [row for row in crew_rows if row["username"] in live_usernames]
 
 connection_status = live["connection"]
-ap_flows = [interface_flow(live, str(row.get("name"))) for row in live.get("interfaces", []) if str(row.get("name", "")).upper().startswith("AP ")]
+ap_names = [str(row["name"]) for row in ap_rows[:3]]
+ap_flows = [ap_interface_flow(live, name) for name in ap_names]
 upstream_flow = interface_flow(live, "ether1")
 statuses = [calculate_quota_status(row["quota_gb"], row["used_gb"], blocked=bool(row["blocked"])) for row in crew_rows] if plan["mode"] == "LIMITED" else []
 
@@ -46,6 +50,33 @@ with st.container(horizontal=True):
     st.metric("AP online", f"{live_ap_count}/{live_ap_total}", border=True)
     st.metric("Crew online", online_count, border=True)
     st.metric("Blocked", blocked_count, border=True)
+
+
+with st.container(border=True):
+    st.subheader("Realtime traffic flow · 3 AP")
+    st.caption("Total RX + TX per access point, diperbarui otomatis setiap 5 detik.")
+
+    @st.fragment(run_every="5s")
+    def render_ap_traffic() -> None:
+        snapshot = get_live_snapshot()
+        if snapshot["connection"]["status"] != "ONLINE":
+            st.warning("Traffic realtime tersedia setelah koneksi RouterOS aktif.")
+            return
+        active_users = {str(item.get("user", "")) for item in snapshot["active_users"] if item.get("user")}
+        record_hotspot_activity(st.session_state.get("active_hotspot_users"), active_users)
+        st.session_state.active_hotspot_users = active_users
+        st.session_state.live_snapshot = snapshot
+        sync_hotspot_users(snapshot)
+        sample = {"Time": datetime.now().strftime("%H:%M:%S")}
+        for name in ap_names:
+            sample[name] = traffic_mbps(ap_interface_flow(snapshot, name))
+        history = st.session_state.setdefault("ap_traffic_history", [])
+        history.append(sample)
+        del history[:-60]
+        chart = pd.DataFrame(history).set_index("Time")
+        st.line_chart(chart, y_label="Mbps", height=300)
+
+    render_ap_traffic()
 
 left, right = st.columns(2)
 with left:

@@ -1,7 +1,7 @@
 from typing import Any
 import re
 
-from database.database import get_connection
+from database.database import get_connection, log_system_event
 from mikrotik.connection import get_connection_status, query
 
 EXCLUDED_HOTSPOT_USERS = {"default-trial"}
@@ -94,6 +94,18 @@ def sync_hotspot_users(snapshot: dict[str, Any]) -> None:
                 )
 
 
+def record_hotspot_activity(previous_users: set[str] | None, current_users: set[str]) -> None:
+    if previous_users is None:
+        return
+    excluded = {username for username in current_users | previous_users if username.casefold() in EXCLUDED_HOTSPOT_USERS}
+    current_users = current_users - excluded
+    previous_users = previous_users - excluded
+    for username in sorted(current_users - previous_users):
+        log_system_event("HOTSPOT LOGIN", f"User {username} masuk ke hotspot", username)
+    for username in sorted(previous_users - current_users):
+        log_system_event("HOTSPOT LOGOUT", f"User {username} keluar dari hotspot", username)
+
+
 def interface_flow(snapshot: dict[str, Any], interface_name: str) -> dict[str, Any] | None:
     """Return live link state and byte counters for a RouterOS interface."""
     for interface in snapshot.get("interfaces", []):
@@ -109,6 +121,23 @@ def interface_flow(snapshot: dict[str, Any], interface_name: str) -> dict[str, A
                 "tx_rate": interface.get("tx-rate"),
             }
     return None
+
+
+def ap_interface_flow(snapshot: dict[str, Any], ap_name: str) -> dict[str, Any] | None:
+    target = ap_name.upper().replace(" ", "-")
+    for interface in snapshot.get("interfaces", []):
+        interface_name = str(interface.get("name", ""))
+        if interface_name.upper().replace(" ", "-") == target:
+            return interface_flow(snapshot, interface_name)
+    return None
+
+
+def traffic_mbps(flow: dict[str, Any] | None) -> float:
+    if not flow:
+        return 0.0
+    rx_rate = _number(flow.get("rx_rate"))
+    tx_rate = _number(flow.get("tx_rate"))
+    return round((rx_rate + tx_rate) / 1_000_000, 3)
 
 
 def format_bytes(value: float) -> str:
