@@ -75,6 +75,24 @@ st.markdown(
     }
     [data-testid="stSidebar"] input::placeholder, [data-testid="stSidebar"] textarea::placeholder { color: #66747d !important; opacity: 1 !important; }
     [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p { color: #c8d1d0 !important; }
+    [data-testid="stSidebar"] [data-testid="stForm"] {
+        background: #1e2d37;
+        border: 1px solid #2f4250;
+        border-radius: 14px;
+        padding: .8rem .8rem .3rem;
+    }
+    [data-testid="stSidebar"] [data-testid="stForm"] button[kind="primary"] {
+        background: #d05a3b !important;
+        border: 0 !important;
+        color: #fff3ea !important;
+        font-weight: 700;
+    }
+    [data-testid="stSidebar"] [data-testid="stForm"] button[kind="primary"]:hover {
+        background: #bb4d31 !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stAlert"] {
+        border-radius: 10px;
+    }
     h1, h2, h3 { color: var(--ink); letter-spacing: 0; }
     h1 { font-family: Georgia, serif; font-size: 2.6rem; margin-bottom: .15rem; }
     h2, h3 { font-family: Georgia, serif; }
@@ -165,19 +183,29 @@ with st.sidebar:
             st.rerun()
     else:
         st.caption("Mode: Viewer · read-only")
-        with st.expander("Admin login"):
-            with st.form("sidebar_admin_login"):
-                admin_username = st.text_input("Username", autocomplete="username")
-                admin_password = st.text_input("Password", type="password", autocomplete="current-password")
-                login_submitted = st.form_submit_button("Login Admin", type="primary", use_container_width=True)
-            if login_submitted:
-                operator = authenticate_operator(admin_username, admin_password)
-                if operator and operator["role"] == "ADMIN":
+        st.markdown("### Admin portal")
+        st.caption("Masuk sebagai Admin untuk mengubah setting dan kontrol user.")
+        with st.form("sidebar_admin_login"):
+            admin_username = st.text_input("Username", autocomplete="username", placeholder="admin")
+            admin_password = st.text_input("Password", type="password", autocomplete="current-password", placeholder="••••••")
+            login_submitted = st.form_submit_button("Login Admin", type="primary", use_container_width=True)
+        if login_submitted:
+            username = admin_username.strip()
+            password = admin_password.strip()
+            if not username or not password:
+                st.warning("Username dan password wajib diisi.")
+            else:
+                operator = authenticate_operator(username, password)
+                if operator is None:
+                    st.error("Login gagal. Periksa username dan password Admin.")
+                elif operator["role"] != "ADMIN":
+                    st.error("Akun valid, tetapi bukan role Admin.")
+                else:
                     st.session_state.auth_user = operator
                     st.session_state.operator = operator["username"]
                     log_system_event("AUTH LOGIN", "Login portal berhasil", operator["username"])
+                    st.success("Login Admin berhasil.")
                     st.rerun()
-                st.error("Akses Admin ditolak. Periksa username dan password.")
     st.divider()
     current_plan = get_active_plan()
     selected_mode = st.segmented_control(
