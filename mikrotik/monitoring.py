@@ -4,6 +4,8 @@ import re
 from database.database import get_connection
 from mikrotik.connection import get_connection_status, query
 
+EXCLUDED_HOTSPOT_USERS = {"default-trial"}
+
 
 def get_live_snapshot() -> dict[str, Any]:
     connection = get_connection_status()
@@ -45,7 +47,7 @@ def normalize_hotspot_users(users: list[dict[str, Any]], active_users: list[dict
     normalized = []
     for user in users:
         username = str(user.get("name", "")).strip()
-        if not username:
+        if not username or username.casefold() in EXCLUDED_HOTSPOT_USERS:
             continue
         active = active_by_user.get(username, {})
         used_gb = _bytes_to_gb(_number(user.get("bytes-in")) + _number(user.get("bytes-out")))

@@ -30,3 +30,15 @@ def test_hotspot_username_is_the_crew_identity():
     assert result["mac_address"] == "AA:BB:CC:DD:EE:FF"
     assert result["is_online"] is True
     assert result["used_gb"] > 0
+
+
+def test_default_trial_is_excluded_from_hotspot_users():
+    users = [
+        {"name": "default-trial", "profile": "default"},
+        {"name": "DEFAULT-TRIAL", "profile": "default"},
+        {"name": "OS1", "profile": "profile-unlimited"},
+    ]
+
+    result = normalize_hotspot_users(users, [])
+
+    assert [item["username"] for item in result] == ["OS1"]
