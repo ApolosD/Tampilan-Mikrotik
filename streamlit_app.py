@@ -93,11 +93,13 @@ st.markdown(
         margin: 0;
         color: #f8ede2 !important;
         letter-spacing: .02em;
+        text-align: center;
     }
     [data-testid="stSidebar"] .admin-portal-head p {
         margin: .25rem 0 0;
         color: #d6e0e5 !important;
         font-size: .82rem;
+        text-align: center;
     }
     [data-testid="stSidebar"] [data-testid="stForm"] button[kind="primary"] {
         background: #d05a3b !important;
