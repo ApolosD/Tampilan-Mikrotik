@@ -4,7 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from database.database import get_active_plan, get_connection
-from mikrotik.monitoring import ap_interface_flow, format_memory, get_live_snapshot, record_hotspot_activity, sync_hotspot_users, traffic_mbps
+from mikrotik.monitoring import ap_interface_flow, format_memory, get_live_snapshot, interface_flow, record_hotspot_activity, sync_hotspot_users, traffic_mbps
 from quota.engine import calculate_quota_status
 from utils.formatters import format_gb
 from utils.ui import render_records

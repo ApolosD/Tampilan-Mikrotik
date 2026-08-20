@@ -11,27 +11,9 @@ st.set_page_config(page_title=APP_NAME, page_icon=":material/network_check:", la
 initialize_database()
 seed_database()
 
-
-def render_login() -> None:
-    st.title("Admin portal")
-    st.caption("Login untuk mengakses MikroTik Internet & Crew Management.")
-    with st.form("login_form"):
-        username = st.text_input("Username", autocomplete="username")
-        password = st.text_input("Password", type="password", autocomplete="current-password")
-        submitted = st.form_submit_button("Login", type="primary", use_container_width=True)
-    if submitted:
-        operator = authenticate_operator(username, password)
-        if operator:
-            st.session_state.auth_user = operator
-            st.session_state.operator = operator["username"]
-            log_system_event("AUTH LOGIN", "Login portal berhasil", operator["username"])
-            st.rerun()
-        st.error("Username atau password salah, atau akun tidak aktif.")
-
-
 if "auth_user" not in st.session_state:
-    render_login()
-    st.stop()
+    st.session_state.auth_user = {"username": "guest", "display_name": "Guest Viewer", "role": "VIEWER", "active": 1}
+    st.session_state.operator = "Guest Viewer"
 
 live_snapshot = get_live_snapshot()
 current_active_users = {str(item.get("user", "")) for item in live_snapshot["active_users"] if item.get("user")}
@@ -89,8 +71,17 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-if "operator" not in st.session_state:
-    st.session_state.operator = "System Operator"
+is_admin = st.session_state.auth_user["role"] == "ADMIN"
+
+operations_pages = [
+    st.Page("app_pages/firewall.py", title="Firewall control", icon=":material/security:"),
+    st.Page("app_pages/logs.py", title="System logs", icon=":material/list_alt:"),
+]
+if is_admin:
+    operations_pages.extend([
+        st.Page("app_pages/security.py", title="Security", icon=":material/admin_panel_settings:"),
+        st.Page("app_pages/settings.py", title="Settings", icon=":material/settings:"),
+    ])
 
 page = st.navigation(
     {
@@ -113,31 +104,42 @@ page = st.navigation(
             st.Page("app_pages/alerts.py", title="Alerts", icon=":material/notifications:"),
             st.Page("app_pages/reports.py", title="Reports", icon=":material/description:"),
         ],
-        "Operations": [
-            st.Page("app_pages/firewall.py", title="Firewall control", icon=":material/security:"),
-            st.Page("app_pages/logs.py", title="System logs", icon=":material/list_alt:"),
-            st.Page("app_pages/security.py", title="Security", icon=":material/admin_panel_settings:"),
-            st.Page("app_pages/settings.py", title="Settings", icon=":material/settings:"),
-        ],
+        "Operations": operations_pages,
     },
     position="sidebar",
 )
 
 with st.sidebar:
     st.caption("Internet management system")
-    st.caption(f"Login: {st.session_state.auth_user['display_name']} · {st.session_state.auth_user['role']}")
-    if st.button("Logout", use_container_width=True):
-        log_system_event("AUTH LOGOUT", "Logout portal", st.session_state.auth_user["username"])
-        st.session_state.pop("auth_user", None)
-        st.session_state.pop("operator", None)
-        st.rerun()
+    if is_admin:
+        st.caption(f"Admin: {st.session_state.auth_user['display_name']}")
+        if st.button("Logout Admin", use_container_width=True):
+            log_system_event("AUTH LOGOUT", "Logout portal", st.session_state.auth_user["username"])
+            st.session_state.auth_user = {"username": "guest", "display_name": "Guest Viewer", "role": "VIEWER", "active": 1}
+            st.session_state.operator = "Guest Viewer"
+            st.rerun()
+    else:
+        st.caption("Mode: Viewer · read-only")
+        with st.expander("Admin login"):
+            with st.form("sidebar_admin_login"):
+                admin_username = st.text_input("Username", autocomplete="username")
+                admin_password = st.text_input("Password", type="password", autocomplete="current-password")
+                login_submitted = st.form_submit_button("Login Admin", type="primary", use_container_width=True)
+            if login_submitted:
+                operator = authenticate_operator(admin_username, admin_password)
+                if operator and operator["role"] == "ADMIN":
+                    st.session_state.auth_user = operator
+                    st.session_state.operator = operator["username"]
+                    log_system_event("AUTH LOGIN", "Login portal berhasil", operator["username"])
+                    st.rerun()
+                st.error("Akses Admin ditolak. Periksa username dan password.")
     st.divider()
     current_plan = get_active_plan()
     selected_mode = st.segmented_control(
         "Internet mode",
         ["LIMITED", "UNLIMITED"],
         default=current_plan["mode"],
-        disabled=st.session_state.auth_user["role"] != "ADMIN",
+        disabled=not is_admin,
     )
     if selected_mode and selected_mode != current_plan["mode"]:
         set_internet_mode(selected_mode)
