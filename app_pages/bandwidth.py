@@ -1,7 +1,7 @@
 import streamlit as st
 
 from database.database import get_connection
-from mikrotik.monitoring import format_bytes, get_live_snapshot, interface_flow
+from mikrotik.monitoring import format_bytes, get_live_snapshot, mapped_ap_port_flows, starlink_interface_flow
 from utils.ui import render_records
 
 st.title("Bandwidth monitoring")
@@ -21,8 +21,8 @@ if router_status["status"] == "ONLINE":
 
 total_down = sum(row["download_mbps"] for row in ap_rows)
 total_up = sum(row["upload_mbps"] for row in ap_rows)
-upstream = interface_flow(live, "ether1") if router_status["status"] == "ONLINE" else None
-ap_interfaces = [interface_flow(live, str(row.get("name"))) for row in interface_rows if str(row.get("name", "")).upper().startswith("AP ")]
+upstream = starlink_interface_flow(live) if router_status["status"] == "ONLINE" else None
+ap_interfaces = mapped_ap_port_flows(live) if router_status["status"] == "ONLINE" else []
 with st.container(horizontal=True):
     st.metric("Current download", f"{total_down:.1f} Mbps", border=True)
     st.metric("Current upload", f"{total_up:.1f} Mbps", border=True)
@@ -56,8 +56,15 @@ if router_status["status"] == "ONLINE":
     with st.container(border=True):
         st.subheader("AP flow interfaces")
         render_records([
-            {"Interface": flow["name"], "State": "ACTIVE" if flow["running"] and not flow["disabled"] else "INACTIVE", "RX total": format_bytes(flow["rx_bytes"]), "TX total": format_bytes(flow["tx_bytes"])}
-            for flow in ap_interfaces if flow
+            {
+                "AP": port["label"],
+                "Port": port["port"],
+                "Interface": port["resolved_interface"] or "Not found",
+                "State": "ACTIVE" if port["flow"] and port["flow"]["running"] and not port["flow"]["disabled"] else "INACTIVE",
+                "RX total": format_bytes(port["flow"]["rx_bytes"]) if port["flow"] else "0.0 B",
+                "TX total": format_bytes(port["flow"]["tx_bytes"]) if port["flow"] else "0.0 B",
+            }
+            for port in ap_interfaces
         ])
 else:
     st.info("RouterOS interface traffic will appear here after credentials are configured and the connection test succeeds.")

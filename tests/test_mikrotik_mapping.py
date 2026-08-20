@@ -68,3 +68,29 @@ def test_hotspot_activity_records_login_and_logout(monkeypatch):
     monitoring.record_hotspot_activity({"crew01"}, {"crew02"})
 
     assert events == [("HOTSPOT LOGIN", "crew02"), ("HOTSPOT LOGOUT", "crew01")]
+
+
+def test_ap_port_mapping_resolves_from_ether_ports():
+    snapshot = {
+        "interfaces": [
+            {"name": "ether2", "running": "true", "disabled": "false", "rx-byte": "100", "tx-byte": "200", "rx-rate": "0", "tx-rate": "0"},
+            {"name": "ether3", "running": "true", "disabled": "false", "rx-byte": "100", "tx-byte": "200", "rx-rate": "0", "tx-rate": "0"},
+            {"name": "ether4", "running": "false", "disabled": "false", "rx-byte": "100", "tx-byte": "200", "rx-rate": "0", "tx-rate": "0"},
+        ]
+    }
+
+    mapped = monitoring.mapped_ap_port_flows(snapshot)
+
+    assert [item["label"] for item in mapped] == ["AP 1", "AP 2", "AP 3"]
+    assert [item["resolved_interface"] for item in mapped] == ["ether2", "ether3", "ether4"]
+    assert mapped[0]["flow"]["running"] is True
+    assert mapped[2]["flow"]["running"] is False
+
+
+def test_starlink_upstream_uses_ether1_alias():
+    snapshot = {"interfaces": [{"name": "ether1", "running": "true", "disabled": "false", "rx-byte": "1", "tx-byte": "2", "rx-rate": "0", "tx-rate": "0"}]}
+
+    upstream = monitoring.starlink_interface_flow(snapshot)
+
+    assert upstream is not None
+    assert upstream["name"] == "ether1"

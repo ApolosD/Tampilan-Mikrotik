@@ -5,6 +5,12 @@ from database.database import get_connection, log_system_event
 from mikrotik.connection import get_connection_status, query
 
 EXCLUDED_HOTSPOT_USERS = {"default-trial"}
+STARLINK_INTERFACE_ALIASES = ("ether1", "starlink", "wan")
+AP_PORT_ALIASES = (
+    ("AP 1", "ether2", ("AP 1", "AP-1", "AP1", "ether2")),
+    ("AP 2", "ether3", ("AP 2", "AP-2", "AP2", "ether3")),
+    ("AP 3", "ether4", ("AP 3", "AP-3", "AP3", "ether4")),
+)
 
 
 def get_live_snapshot() -> dict[str, Any]:
@@ -143,6 +149,25 @@ def ap_interface_flows(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
     return sorted(flows, key=lambda flow: flow["name"])
 
 
+def starlink_interface_flow(snapshot: dict[str, Any]) -> dict[str, Any] | None:
+    return _find_interface_flow(snapshot, STARLINK_INTERFACE_ALIASES)
+
+
+def mapped_ap_port_flows(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    mapped = []
+    for label, port_name, aliases in AP_PORT_ALIASES:
+        flow = _find_interface_flow(snapshot, aliases)
+        mapped.append(
+            {
+                "label": label,
+                "port": port_name,
+                "resolved_interface": flow["name"] if flow else None,
+                "flow": flow,
+            }
+        )
+    return mapped
+
+
 def refresh_snapshot_interfaces(snapshot: dict[str, Any]) -> dict[str, Any]:
     if snapshot.get("connection", {}).get("status") != "ONLINE":
         return snapshot
@@ -156,6 +181,18 @@ def _canonical_ap_name(name: str) -> str:
     normalized = re.sub(r"\s+", "", name.upper())
     match = re.fullmatch(r"AP[-_]?0*(\d+)", normalized)
     return f"AP-{int(match.group(1))}" if match else normalized
+
+
+def _find_interface_flow(snapshot: dict[str, Any], aliases: tuple[str, ...]) -> dict[str, Any] | None:
+    for interface in snapshot.get("interfaces", []):
+        interface_name = str(interface.get("name", ""))
+        if any(_same_interface_name(interface_name, alias) for alias in aliases):
+            return interface_flow(snapshot, interface_name)
+    return None
+
+
+def _same_interface_name(left: str, right: str) -> bool:
+    return left.casefold() == right.casefold() or _canonical_ap_name(left) == _canonical_ap_name(right)
 
 
 def traffic_mbps(flow: dict[str, Any] | None, previous_flow: dict[str, Any] | None = None, elapsed_seconds: float = 1.0) -> float:

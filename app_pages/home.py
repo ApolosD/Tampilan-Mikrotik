@@ -6,7 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from database.database import get_active_plan, get_connection
-from mikrotik.monitoring import ap_interface_flow, ap_interface_flows, format_memory, get_live_snapshot, interface_flow, refresh_snapshot_interfaces, traffic_mbps
+from mikrotik.monitoring import format_memory, get_live_snapshot, mapped_ap_port_flows, refresh_snapshot_interfaces, starlink_interface_flow, traffic_mbps
 from quota.engine import calculate_quota_status
 from utils.formatters import format_gb
 from utils.ui import render_records
@@ -27,19 +27,8 @@ if live["connection"]["status"] == "ONLINE":
     crew_rows = [row for row in crew_rows if row["username"] in live_usernames]
 
 connection_status = live["connection"]
-if connection_status["status"] == "ONLINE":
-    raw_ap_names = [str(item.get("name", "")) for item in live.get("interfaces", []) if str(item.get("name", "")).upper().startswith("AP ")]
-    if raw_ap_names:
-        overview_ap_names = raw_ap_names[:3]
-    else:
-        overview_ap_names = [flow["name"] for flow in ap_interface_flows(live)[:3]]
-    if not overview_ap_names:
-        overview_ap_names = [str(row["name"]) for row in ap_rows[:3]]
-else:
-    overview_ap_names = [str(row["name"]) for row in ap_rows[:3]]
-
-ap_flows = [ap_interface_flow(live, name) for name in overview_ap_names]
-upstream_flow = interface_flow(live, "ether1")
+ap_port_rows = mapped_ap_port_flows(live)
+upstream_flow = starlink_interface_flow(live)
 statuses = [calculate_quota_status(row["quota_gb"], row["used_gb"], blocked=bool(row["blocked"])) for row in crew_rows] if plan["mode"] == "LIMITED" else []
 
 used_gb = float(plan["used_gb"])
@@ -57,8 +46,8 @@ with st.container(horizontal=True):
     else:
         st.metric("Network policy", "No quota cap", border=True)
         st.metric("Traffic state", "Monitoring", border=True)
-    live_ap_count = sum(flow is not None and flow["running"] and not flow["disabled"] for flow in ap_flows)
-    live_ap_total = len(overview_ap_names) if overview_ap_names else len(ap_rows)
+    live_ap_count = sum(row["flow"] is not None and row["flow"]["running"] and not row["flow"]["disabled"] for row in ap_port_rows)
+    live_ap_total = len(ap_port_rows)
     st.metric("AP online", f"{live_ap_count}/{live_ap_total}", border=True)
     st.metric("Crew online", online_count, border=True)
     st.metric("Blocked", blocked_count, border=True)
@@ -121,10 +110,7 @@ with st.container(border=True):
             st.warning("Traffic realtime tersedia setelah koneksi RouterOS aktif.")
             return
 
-        raw_ap_names = [str(item.get("name", "")) for item in snapshot.get("interfaces", []) if str(item.get("name", "")).upper().startswith("AP ")]
-        chart_ap_names = raw_ap_names[:3] if raw_ap_names else [flow["name"] for flow in ap_interface_flows(snapshot)[:3]]
-        if not chart_ap_names:
-            chart_ap_names = [str(row["name"]) for row in ap_rows[:3]]
+        chart_ports = mapped_ap_port_flows(snapshot)
 
         sample = {"Time": datetime.now().strftime("%H:%M:%S")}
         now = monotonic()
@@ -133,10 +119,11 @@ with st.container(border=True):
         previous_flows = st.session_state.get("ap_traffic_flows", {})
         current_flows = {}
 
-        for name in chart_ap_names:
-            flow = ap_interface_flow(snapshot, name)
-            current_flows[name] = flow
-            sample[name] = traffic_mbps(flow, previous_flows.get(name), elapsed_seconds)
+        for port in chart_ports:
+            key = port["label"]
+            flow = port["flow"]
+            current_flows[key] = flow
+            sample[key] = traffic_mbps(flow, previous_flows.get(key), elapsed_seconds)
 
         st.session_state.ap_traffic_flows = current_flows
         st.session_state.ap_traffic_sample_time = now
