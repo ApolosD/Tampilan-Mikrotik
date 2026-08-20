@@ -161,6 +161,19 @@ with st.container(border=True):
                 color=alt.Color("AP:N", scale=alt.Scale(range=palette)),
             )
             .properties(height=340)
+            .configure_view(fill="#fffaf2", stroke="#d8ccb7")
+            .configure_axis(
+                labelColor="#2b3942",
+                titleColor="#2b3942",
+                gridColor="#e8ddca",
+                domainColor="#c9bda8",
+                tickColor="#c9bda8",
+            )
+            .configure_legend(
+                labelColor="#2b3942",
+                titleColor="#2b3942",
+                orient="bottom",
+            )
         )
         st.altair_chart(chart, use_container_width=True)
 
