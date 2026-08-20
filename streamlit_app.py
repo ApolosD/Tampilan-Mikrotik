@@ -81,6 +81,24 @@ st.markdown(
         border-radius: 14px;
         padding: .8rem .8rem .3rem;
     }
+    [data-testid="stSidebar"] .admin-portal-head {
+        background: linear-gradient(135deg, #2a3d4a 0%, #22343f 100%);
+        border: 1px solid #3a5060;
+        border-radius: 12px;
+        padding: .6rem .75rem;
+        margin: .2rem 0 .55rem;
+        box-shadow: 0 6px 18px rgba(0,0,0,.24);
+    }
+    [data-testid="stSidebar"] .admin-portal-head h4 {
+        margin: 0;
+        color: #f8ede2 !important;
+        letter-spacing: .02em;
+    }
+    [data-testid="stSidebar"] .admin-portal-head p {
+        margin: .25rem 0 0;
+        color: #d6e0e5 !important;
+        font-size: .82rem;
+    }
     [data-testid="stSidebar"] [data-testid="stForm"] button[kind="primary"] {
         background: #d05a3b !important;
         border: 0 !important;
@@ -183,8 +201,15 @@ with st.sidebar:
             st.rerun()
     else:
         st.caption("Mode: Viewer · read-only")
-        st.markdown("### Admin portal")
-        st.caption("Masuk sebagai Admin untuk mengubah setting dan kontrol user.")
+        st.markdown(
+            """
+            <div class="admin-portal-head">
+                <h4>Admin portal</h4>
+                <p>Masuk sebagai Admin untuk mengubah setting dan kontrol user.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         with st.form("sidebar_admin_login"):
             admin_username = st.text_input("Username", autocomplete="username", placeholder="admin")
             admin_password = st.text_input("Password", type="password", autocomplete="current-password", placeholder="••••••")
