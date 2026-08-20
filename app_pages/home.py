@@ -1,10 +1,12 @@
 from datetime import datetime
+from time import monotonic
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 
 from database.database import get_active_plan, get_connection
-from mikrotik.monitoring import ap_interface_flow, format_memory, get_live_snapshot, interface_flow, record_hotspot_activity, sync_hotspot_users, traffic_mbps
+from mikrotik.monitoring import ap_interface_flow, ap_interface_flows, format_memory, get_live_snapshot, interface_flow, record_hotspot_activity, sync_hotspot_users, traffic_mbps
 from quota.engine import calculate_quota_status
 from utils.formatters import format_gb
 from utils.ui import render_records
@@ -25,8 +27,18 @@ if live["connection"]["status"] == "ONLINE":
     crew_rows = [row for row in crew_rows if row["username"] in live_usernames]
 
 connection_status = live["connection"]
-ap_names = [str(row["name"]) for row in ap_rows[:3]]
-ap_flows = [ap_interface_flow(live, name) for name in ap_names]
+if connection_status["status"] == "ONLINE":
+    raw_ap_names = [str(item.get("name", "")) for item in live.get("interfaces", []) if str(item.get("name", "")).upper().startswith("AP ")]
+    if raw_ap_names:
+        overview_ap_names = raw_ap_names[:3]
+    else:
+        overview_ap_names = [flow["name"] for flow in ap_interface_flows(live)[:3]]
+    if not overview_ap_names:
+        overview_ap_names = [str(row["name"]) for row in ap_rows[:3]]
+else:
+    overview_ap_names = [str(row["name"]) for row in ap_rows[:3]]
+
+ap_flows = [ap_interface_flow(live, name) for name in overview_ap_names]
 upstream_flow = interface_flow(live, "ether1")
 statuses = [calculate_quota_status(row["quota_gb"], row["used_gb"], blocked=bool(row["blocked"])) for row in crew_rows] if plan["mode"] == "LIMITED" else []
 
@@ -46,37 +58,10 @@ with st.container(horizontal=True):
         st.metric("Network policy", "No quota cap", border=True)
         st.metric("Traffic state", "Monitoring", border=True)
     live_ap_count = sum(flow is not None and flow["running"] and not flow["disabled"] for flow in ap_flows)
-    live_ap_total = len(ap_flows) if ap_flows else len(ap_rows)
+    live_ap_total = len(overview_ap_names) if overview_ap_names else len(ap_rows)
     st.metric("AP online", f"{live_ap_count}/{live_ap_total}", border=True)
     st.metric("Crew online", online_count, border=True)
     st.metric("Blocked", blocked_count, border=True)
-
-
-with st.container(border=True):
-    st.subheader("Realtime traffic flow · 3 AP")
-    st.caption("Total RX + TX per access point, diperbarui otomatis setiap 5 detik.")
-
-    @st.fragment(run_every="5s")
-    def render_ap_traffic() -> None:
-        snapshot = get_live_snapshot()
-        if snapshot["connection"]["status"] != "ONLINE":
-            st.warning("Traffic realtime tersedia setelah koneksi RouterOS aktif.")
-            return
-        active_users = {str(item.get("user", "")) for item in snapshot["active_users"] if item.get("user")}
-        record_hotspot_activity(st.session_state.get("active_hotspot_users"), active_users)
-        st.session_state.active_hotspot_users = active_users
-        st.session_state.live_snapshot = snapshot
-        sync_hotspot_users(snapshot)
-        sample = {"Time": datetime.now().strftime("%H:%M:%S")}
-        for name in ap_names:
-            sample[name] = traffic_mbps(ap_interface_flow(snapshot, name))
-        history = st.session_state.setdefault("ap_traffic_history", [])
-        history.append(sample)
-        del history[:-60]
-        chart = pd.DataFrame(history).set_index("Time")
-        st.line_chart(chart, y_label="Mbps", height=300)
-
-    render_ap_traffic()
 
 left, right = st.columns(2)
 with left:
@@ -122,3 +107,65 @@ with st.container(border=True):
             record.update({"Quota": format_gb(status.quota_gb), "Remaining": format_gb(status.remaining_gb), "Display": f"{status.display_usage_percentage:.0f}%"})
         table.append(record)
     render_records(table)
+
+with st.container(border=True):
+    st.subheader("Realtime traffic flow · 3 AP")
+    st.caption("Total RX + TX per access point, diperbarui otomatis setiap 5 detik.")
+
+    @st.fragment(run_every="5s")
+    def render_ap_traffic() -> None:
+        snapshot = get_live_snapshot()
+        if snapshot["connection"]["status"] != "ONLINE":
+            st.warning("Traffic realtime tersedia setelah koneksi RouterOS aktif.")
+            return
+
+        active_users = {str(item.get("user", "")) for item in snapshot["active_users"] if item.get("user")}
+        record_hotspot_activity(st.session_state.get("active_hotspot_users"), active_users)
+        st.session_state.active_hotspot_users = active_users
+        st.session_state.live_snapshot = snapshot
+        sync_hotspot_users(snapshot)
+
+        raw_ap_names = [str(item.get("name", "")) for item in snapshot.get("interfaces", []) if str(item.get("name", "")).upper().startswith("AP ")]
+        chart_ap_names = raw_ap_names[:3] if raw_ap_names else [flow["name"] for flow in ap_interface_flows(snapshot)[:3]]
+        if not chart_ap_names:
+            chart_ap_names = [str(row["name"]) for row in ap_rows[:3]]
+
+        sample = {"Time": datetime.now().strftime("%H:%M:%S")}
+        now = monotonic()
+        previous_time = st.session_state.get("ap_traffic_sample_time", now)
+        elapsed_seconds = max(now - previous_time, 1.0)
+        previous_flows = st.session_state.get("ap_traffic_flows", {})
+        current_flows = {}
+
+        for name in chart_ap_names:
+            flow = ap_interface_flow(snapshot, name)
+            current_flows[name] = flow
+            sample[name] = traffic_mbps(flow, previous_flows.get(name), elapsed_seconds)
+
+        st.session_state.ap_traffic_flows = current_flows
+        st.session_state.ap_traffic_sample_time = now
+        history = st.session_state.setdefault("ap_traffic_history", [])
+        history.append(sample)
+        del history[:-60]
+
+        chart_frame = pd.DataFrame(history)
+        series_columns = [column for column in chart_frame.columns if column != "Time"]
+        if not series_columns:
+            st.info("Belum ada data AP untuk divisualisasikan.")
+            return
+
+        melted = chart_frame.melt(id_vars="Time", var_name="AP", value_name="Mbps")
+        palette = ["#0B3C8C", "#D95F02", "#1B7F4A"]
+        chart = (
+            alt.Chart(melted)
+            .mark_line(strokeWidth=3)
+            .encode(
+                x=alt.X("Time:N", title="Waktu"),
+                y=alt.Y("Mbps:Q", title="Mbps"),
+                color=alt.Color("AP:N", scale=alt.Scale(range=palette)),
+            )
+            .properties(height=340)
+        )
+        st.altair_chart(chart, use_container_width=True)
+
+    render_ap_traffic()

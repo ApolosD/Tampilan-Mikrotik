@@ -46,12 +46,19 @@ def test_default_trial_is_excluded_from_hotspot_users():
 
 
 def test_ap_flow_accepts_space_alias_and_combines_rates():
-    snapshot = {"interfaces": [{"name": "AP 01", "rx-rate": "1000000", "tx-rate": "2500000"}]}
+    snapshot = {"interfaces": [{"name": "AP 1", "rx-rate": "1000000", "tx-rate": "2500000"}]}
 
     flow = monitoring.ap_interface_flow(snapshot, "AP-01")
 
-    assert flow["name"] == "AP 01"
+    assert flow["name"] == "AP 1"
     assert monitoring.traffic_mbps(flow) == 3.5
+
+
+def test_traffic_uses_counter_delta_when_live_rate_is_zero():
+    previous = {"rx_bytes": 1_000_000, "tx_bytes": 2_000_000}
+    current = {"rx_bytes": 2_000_000, "tx_bytes": 4_000_000, "rx_rate": "0", "tx_rate": "0"}
+
+    assert monitoring.traffic_mbps(current, previous, 2) == 12.0
 
 
 def test_hotspot_activity_records_login_and_logout(monkeypatch):

@@ -28,7 +28,35 @@ st.markdown(
     :root { --ink: #18242d; --muted: #66747d; --coral: #d05a3b; --teal: #147d78; --paper: #f7f3eb; }
     .stApp { background: radial-gradient(circle at 90% 0%, #ead6c7 0, transparent 32%), var(--paper); }
     [data-testid="stSidebar"] { background: #18242d; }
-    [data-testid="stSidebar"] * { color: #f4efe6 !important; }
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"],
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+    [data-testid="stSidebar"] .stCaption,
+    [data-testid="stSidebar"] .st-emotion-cache-10trblm,
+    [data-testid="stSidebar"] .st-emotion-cache-16idsys {
+        color: #f4efe6 !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stTextInput"] input,
+    [data-testid="stSidebar"] [data-testid="stTextInput"] input[type="password"],
+    [data-testid="stSidebar"] [data-testid="stTextInput"] input[type="text"],
+    [data-testid="stSidebar"] [data-baseweb="input"] input,
+    [data-testid="stSidebar"] [data-baseweb="base-input"] input,
+    [data-testid="stSidebar"] [data-baseweb="textarea"] textarea {
+        color: #18242d !important;
+        -webkit-text-fill-color: #18242d !important;
+        caret-color: #18242d !important;
+        opacity: 1 !important;
+        text-shadow: none !important;
+        background: #f7f3eb !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stTextInput"] [data-baseweb="base-input"] > div,
+    [data-testid="stSidebar"] [data-baseweb="input"] > div,
+    [data-testid="stSidebar"] [data-baseweb="base-input"] > div,
+    [data-testid="stSidebar"] [data-baseweb="textarea"] > div {
+        background: #f7f3eb !important;
+        border-color: #d9d0c0 !important;
+    }
+    [data-testid="stSidebar"] input::placeholder, [data-testid="stSidebar"] textarea::placeholder { color: #66747d !important; opacity: 1 !important; }
     [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p { color: #c8d1d0 !important; }
     h1, h2, h3 { color: var(--ink); letter-spacing: 0; }
     h1 { font-family: Georgia, serif; font-size: 2.6rem; margin-bottom: .15rem; }

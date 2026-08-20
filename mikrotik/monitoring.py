@@ -124,19 +124,39 @@ def interface_flow(snapshot: dict[str, Any], interface_name: str) -> dict[str, A
 
 
 def ap_interface_flow(snapshot: dict[str, Any], ap_name: str) -> dict[str, Any] | None:
-    target = ap_name.upper().replace(" ", "-")
+    target = _canonical_ap_name(ap_name)
     for interface in snapshot.get("interfaces", []):
         interface_name = str(interface.get("name", ""))
-        if interface_name.upper().replace(" ", "-") == target:
+        if _canonical_ap_name(interface_name) == target:
             return interface_flow(snapshot, interface_name)
     return None
 
 
-def traffic_mbps(flow: dict[str, Any] | None) -> float:
+def ap_interface_flows(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    flows = []
+    for interface in snapshot.get("interfaces", []):
+        interface_name = str(interface.get("name", ""))
+        if _canonical_ap_name(interface_name).startswith("AP-"):
+            flow = interface_flow(snapshot, interface_name)
+            if flow:
+                flows.append(flow)
+    return sorted(flows, key=lambda flow: flow["name"])
+
+
+def _canonical_ap_name(name: str) -> str:
+    normalized = re.sub(r"\s+", "", name.upper())
+    match = re.fullmatch(r"AP[-_]?0*(\d+)", normalized)
+    return f"AP-{int(match.group(1))}" if match else normalized
+
+
+def traffic_mbps(flow: dict[str, Any] | None, previous_flow: dict[str, Any] | None = None, elapsed_seconds: float = 1.0) -> float:
     if not flow:
         return 0.0
     rx_rate = _number(flow.get("rx_rate"))
     tx_rate = _number(flow.get("tx_rate"))
+    if rx_rate == 0 and tx_rate == 0 and previous_flow and elapsed_seconds > 0:
+        rx_rate = max(_number(flow.get("rx_bytes")) - _number(previous_flow.get("rx_bytes")), 0) * 8 / elapsed_seconds
+        tx_rate = max(_number(flow.get("tx_bytes")) - _number(previous_flow.get("tx_bytes")), 0) * 8 / elapsed_seconds
     return round((rx_rate + tx_rate) / 1_000_000, 3)
 
 
