@@ -113,6 +113,50 @@ st.markdown(
     [data-testid="stSidebar"] [data-testid="stAlert"] {
         border-radius: 10px;
     }
+    [data-testid="stSidebarNav"] {
+        padding-top: .4rem;
+    }
+    [data-testid="stSidebarNav"] > ul {
+        gap: .18rem;
+    }
+    [data-testid="stSidebarNav"] li div a {
+        padding: .5rem .68rem;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        gap: .56rem;
+        line-height: 1.15;
+    }
+    [data-testid="stSidebarNav"] li div a [data-testid="stIcon"] {
+        width: 1.12rem;
+        min-width: 1.12rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        opacity: .95;
+    }
+    [data-testid="stSidebarNav"] li div a span {
+        color: #e7ecef !important;
+        opacity: 1 !important;
+        font-size: 1.02rem;
+        font-weight: 510;
+    }
+    [data-testid="stSidebarNav"] li div a:hover span {
+        color: #ffffff !important;
+    }
+    [data-testid="stSidebarNav"] div[role="group"] > div {
+        margin-bottom: .18rem;
+    }
+    [data-testid="stSidebar"] hr {
+        margin: .7rem 0 .7rem;
+        border-color: #2a3a45;
+    }
+    [data-testid="stSidebar"] .stCaption {
+        margin-bottom: .3rem;
+    }
+    [data-testid="stSidebar"] .stButton {
+        margin-top: .25rem;
+    }
     h1, h2, h3 { color: var(--ink); letter-spacing: 0; }
     h1 { font-family: Georgia, serif; font-size: 2.6rem; margin-bottom: .15rem; }
     h2, h3 { font-family: Georgia, serif; }
@@ -233,17 +277,19 @@ with st.sidebar:
                     log_system_event("AUTH LOGIN", "Login portal berhasil", operator["username"])
                     st.success("Login Admin berhasil.")
                     st.rerun()
-    st.divider()
     current_plan = get_active_plan()
-    selected_mode = st.segmented_control(
-        "Internet mode",
-        ["LIMITED", "UNLIMITED"],
-        default=current_plan["mode"],
-        disabled=not is_admin,
-    )
-    if selected_mode and selected_mode != current_plan["mode"]:
-        set_internet_mode(selected_mode)
-        st.rerun()
+    st.divider()
+    if is_admin:
+        selected_mode = st.segmented_control(
+            "Internet mode",
+            ["LIMITED", "UNLIMITED"],
+            default=current_plan["mode"],
+        )
+        if selected_mode and selected_mode != current_plan["mode"]:
+            set_internet_mode(selected_mode)
+            st.rerun()
+    else:
+        st.caption(f"Internet mode: {current_plan['mode']} (read-only)")
     st.caption("Local data · RouterOS connection enabled when configured")
 
 page.run()
