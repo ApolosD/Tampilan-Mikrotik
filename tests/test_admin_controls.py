@@ -7,12 +7,16 @@ class FakePath(list):
         super().__init__(values)
         self.removed = []
         self.updated = []
+        self.added = []
 
     def remove(self, item_id):
         self.removed.append(item_id)
 
     def set(self, item_id, **values):
         self.updated.append((item_id, values))
+
+    def add(self, **values):
+        self.added.append(values)
 
 
 class FakeApi:
@@ -60,3 +64,22 @@ def test_block_updates_matching_hotspot_user(monkeypatch):
     actions.set_user_blocked("crew01", True)
 
     assert api.paths[("ip", "hotspot", "user")].updated == [("*2", {"disabled": "yes"})]
+
+
+def test_create_hotspot_user_adds_new_routeros_user(monkeypatch):
+    api = FakeApi()
+    monkeypatch.setattr(actions, "open_connection", lambda: FakeConnection(api))
+
+    actions.create_hotspot_user("new-user", "pass1234", profile="default", shared_users=2)
+
+    assert api.paths[("ip", "hotspot", "user")].added == [{"name": "new-user", "password": "pass1234", "profile": "default", "shared-users": "2"}]
+
+
+def test_delete_hotspot_user_removes_user(monkeypatch):
+    api = FakeApi()
+    monkeypatch.setattr(actions, "open_connection", lambda: FakeConnection(api))
+
+    removed = actions.delete_hotspot_user("crew01")
+
+    assert removed is True
+    assert api.paths[("ip", "hotspot", "user")].removed == ["*2"]
