@@ -27,6 +27,8 @@ for row in rows:
         "IP address": row["ip_address"],
         "MAC address": row["mac_address"] or "-",
         "AP": row["access_point"],
+        "Profile": row["profile"] or "-",
+        "Limit uptime": row["limit_uptime"] or "-",
         "Data used": format_gb(row["used_gb"]),
         "Status": row["status"] if plan["mode"] == "UNLIMITED" else status.status,
         "Bandwidth": f"{row['bandwidth_down_mbps']:.0f}/{row['bandwidth_up_mbps']:.0f} Mbps",
