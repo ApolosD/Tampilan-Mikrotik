@@ -1,0 +1,18 @@
+[Unit]
+Description=MikroTik Dashboard Streamlit
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/mikrotik_dashboard
+EnvironmentFile=/opt/mikrotik_dashboard/.env
+ExecStart=/opt/mikrotik_dashboard/.venv/bin/streamlit run streamlit_app.py --server.address 0.0.0.0 --server.port 8501
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target

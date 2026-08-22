@@ -1,77 +1,106 @@
 # Deploy to VPS (Production)
 
-Dokumen ini untuk memastikan aplikasi Streamlit tidak sleep dan startup lebih stabil di server.
+Dokumen ini fokus ke deployment stabil di VPS Linux (Ubuntu 22.04/24.04), tanpa sleep, dan siap reverse proxy Nginx.
 
-## 1) Jalankan app sebagai service systemd
+## File deploy yang disediakan
 
-Contoh service file:
+- `deploy/vps/install_ubuntu.sh`
+- `deploy/vps/mikrotik-dashboard.service`
+- `deploy/vps/nginx-mikrotik-dashboard.conf`
+- `deploy/vps/env.production.example`
+- `deploy/vps/quick_checks.sh`
 
-```ini
-[Unit]
-Description=MikroTik Dashboard Streamlit
-After=network.target
+## 1) Upload source ke VPS
 
-[Service]
-Type=simple
-User=www-data
-WorkingDirectory=/opt/mikrotik_dashboard
-EnvironmentFile=/opt/mikrotik_dashboard/.env
-ExecStart=/opt/mikrotik_dashboard/.venv/bin/streamlit run streamlit_app.py --server.port 8501 --server.address 0.0.0.0
-Restart=always
-RestartSec=3
-TimeoutStopSec=20
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Simpan sebagai `/etc/systemd/system/mikrotik-dashboard.service` lalu:
+Contoh target folder produksi:
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable mikrotik-dashboard
+/opt/mikrotik_dashboard
+```
+
+## 2) Jalankan installer otomatis
+
+Di root project pada VPS:
+
+```bash
+chmod +x deploy/vps/install_ubuntu.sh deploy/vps/quick_checks.sh
+sudo bash deploy/vps/install_ubuntu.sh
+```
+
+Script ini akan:
+
+- install dependensi sistem (python3, venv, nginx)
+- siapkan virtualenv dan install `requirements.txt`
+- pasang service systemd
+- pasang config Nginx
+- restart service app dan Nginx
+
+## 3) Isi kredensial produksi
+
+Edit file environment:
+
+```bash
+sudo nano /opt/mikrotik_dashboard/.env
+```
+
+Minimal isi:
+
+- `ADMIN_PASSWORD`
+- `MIKROTIK_HOST`
+- `MIKROTIK_PORT`
+- `MIKROTIK_USER`
+- `MIKROTIK_PASS`
+
+Setelah edit:
+
+```bash
 sudo systemctl restart mikrotik-dashboard
-sudo systemctl status mikrotik-dashboard
 ```
 
-## 2) Reverse proxy Nginx
+## 4) Set domain Nginx
 
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:8501;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_read_timeout 300;
-    }
-}
-```
-
-## 3) Hindari sleep
-
-Jika berjalan di VPS sendiri dengan systemd, aplikasi tidak sleep selama service aktif.
-
-Cek service:
+Edit:
 
 ```bash
-sudo systemctl is-active mikrotik-dashboard
+sudo nano /etc/nginx/sites-available/mikrotik-dashboard
+```
+
+Ganti:
+
+- `server_name your-domain.com;`
+
+Lalu reload:
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+## 5) Verifikasi cepat
+
+```bash
+sudo bash /opt/mikrotik_dashboard/deploy/vps/quick_checks.sh
+```
+
+Atau manual:
+
+```bash
+sudo systemctl status mikrotik-dashboard
+curl -I http://127.0.0.1:8501
 sudo journalctl -u mikrotik-dashboard -n 100 --no-pager
 ```
 
-## 4) Health check sederhana
+## 6) HTTPS (disarankan)
 
-Tambahkan monitoring eksternal (Uptime Kuma atau sejenis) untuk hit endpoint root setiap 1-5 menit.
+Setelah domain aktif:
 
-## 5) Optimasi startup yang sudah diterapkan di kode
+```bash
+sudo apt-get install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d your-domain.com
+```
 
-- Snapshot RouterOS tidak dipanggil di setiap rerun.
-- Refresh snapshot dibatasi interval pendek.
-- Sinkronisasi hotspot user dibatasi interval lebih longgar.
-- Konfigurasi Streamlit production: `runOnSave=false`, `fileWatcherType=none`, `fastReruns=true`.
+## Catatan sleep dan performa
+
+- Di VPS + systemd, app tidak sleep selama service aktif.
+- Kode sudah dituning untuk startup lebih ringan (snapshot/sync tidak dipanggil berlebihan per rerun).
+- Config Streamlit produksi sudah diatur di `.streamlit/config.toml`.
