@@ -240,37 +240,6 @@ if "auth_user" not in st.session_state:
 if "operator" not in st.session_state:
     st.session_state.operator = st.session_state.auth_user.get("display_name", "Guest Viewer")
 
-page = st.navigation(
-    {
-        "": [
-            st.Page("app_pages/home.py", title="Overview", icon=":material/dashboard:"),
-        ],
-        "Management": [
-            st.Page("app_pages/crew.py", title="Crew", icon=":material/group:"),
-            st.Page("app_pages/active_users.py", title="Active users", icon=":material/person_search:"),
-            st.Page("app_pages/devices.py", title="Devices", icon=":material/devices:"),
-            st.Page("app_pages/access_points.py", title="Access points", icon=":material/wifi:"),
-            st.Page("app_pages/bandwidth.py", title="Bandwidth", icon=":material/speed:"),
-            st.Page("app_pages/internet_plan.py", title="Internet plan", icon=":material/data_usage:"),
-            st.Page("app_pages/quota.py", title="Quota control", icon=":material/pie_chart:"),
-            st.Page("app_pages/transactions.py", title="Transactions", icon=":material/receipt_long:"),
-        ],
-        "Intelligence": [
-            st.Page("app_pages/analytics.py", title="Analytics", icon=":material/analytics:"),
-            st.Page("app_pages/forecast.py", title="Forecast", icon=":material/insights:"),
-            st.Page("app_pages/alerts.py", title="Alerts", icon=":material/notifications:"),
-            st.Page("app_pages/reports.py", title="Reports", icon=":material/description:"),
-        ],
-        "Operations": [
-            st.Page("app_pages/firewall.py", title="Firewall control", icon=":material/security:"),
-            st.Page("app_pages/logs.py", title="System logs", icon=":material/list_alt:"),
-            st.Page("app_pages/security.py", title="Security", icon=":material/admin_panel_settings:"),
-            st.Page("app_pages/settings.py", title="Settings", icon=":material/settings:"),
-        ],
-    },
-    position="sidebar",
-)
-
 with st.sidebar:
     is_admin = st.session_state.auth_user.get("role") == "ADMIN"
 
@@ -323,5 +292,37 @@ with st.sidebar:
         st.rerun()
 
     st.caption("Local data · RouterOS connection enabled when configured")
+    st.divider()
+
+page = st.navigation(
+    {
+        "": [
+            st.Page("app_pages/home.py", title="Overview", icon=":material/dashboard:"),
+        ],
+        "Management": [
+            st.Page("app_pages/crew.py", title="Crew", icon=":material/group:"),
+            st.Page("app_pages/active_users.py", title="Active users", icon=":material/person_search:"),
+            st.Page("app_pages/devices.py", title="Devices", icon=":material/devices:"),
+            st.Page("app_pages/access_points.py", title="Access points", icon=":material/wifi:"),
+            st.Page("app_pages/bandwidth.py", title="Bandwidth", icon=":material/speed:"),
+            st.Page("app_pages/internet_plan.py", title="Internet plan", icon=":material/data_usage:"),
+            st.Page("app_pages/quota.py", title="Quota control", icon=":material/pie_chart:"),
+            st.Page("app_pages/transactions.py", title="Transactions", icon=":material/receipt_long:"),
+        ],
+        "Intelligence": [
+            st.Page("app_pages/analytics.py", title="Analytics", icon=":material/analytics:"),
+            st.Page("app_pages/forecast.py", title="Forecast", icon=":material/insights:"),
+            st.Page("app_pages/alerts.py", title="Alerts", icon=":material/notifications:"),
+            st.Page("app_pages/reports.py", title="Reports", icon=":material/description:"),
+        ],
+        "Operations": [
+            st.Page("app_pages/firewall.py", title="Firewall control", icon=":material/security:"),
+            st.Page("app_pages/logs.py", title="System logs", icon=":material/list_alt:"),
+            st.Page("app_pages/security.py", title="Security", icon=":material/admin_panel_settings:"),
+            st.Page("app_pages/settings.py", title="Settings", icon=":material/settings:"),
+        ],
+    },
+    position="sidebar",
+)
 
 page.run()
