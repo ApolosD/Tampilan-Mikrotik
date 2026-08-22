@@ -64,6 +64,18 @@ st.markdown(
             linear-gradient(155deg, #edf3fa 0%, #f8fbff 44%, #eef5fc 100%);
         background-attachment: fixed;
     }
+    [data-testid="stHeader"],
+    [data-testid="stToolbar"],
+    [data-testid="stDecoration"],
+    #MainMenu,
+    header {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+    }
+    [data-testid="stAppViewContainer"] > .main {
+        padding-top: 0 !important;
+    }
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #0f2230 0%, #142f41 100%);
         border-right: 1px solid rgba(183, 208, 226, 0.22);
