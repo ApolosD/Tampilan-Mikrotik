@@ -1,5 +1,7 @@
 from datetime import date, timedelta
 
+from config.settings import ADMIN_PASSWORD
+from database.auth import hash_password
 from database.database import get_connection, initialize_database
 
 
@@ -50,9 +52,17 @@ def seed_database() -> None:
             )
         if connection.execute("SELECT COUNT(*) FROM operators").fetchone()[0] == 0:
             connection.executemany(
-                "INSERT INTO operators (username, display_name, role) VALUES (?, ?, ?)",
-                [("admin", "System Administrator", "ADMIN"), ("operator", "Network Operator", "OPERATOR"), ("viewer", "Read-only Viewer", "VIEWER")],
+                "INSERT INTO operators (username, display_name, role, password_hash) VALUES (?, ?, ?, ?)",
+                [
+                    ("admin", "System Administrator", "ADMIN", hash_password(ADMIN_PASSWORD)),
+                    ("operator", "Network Operator", "OPERATOR", hash_password("operator1")),
+                    ("viewer", "Read-only Viewer", "VIEWER", hash_password("viewer01")),
+                ],
             )
+        else:
+            admin = connection.execute("SELECT id, password_hash FROM operators WHERE username = 'admin'").fetchone()
+            if admin and not admin["password_hash"]:
+                connection.execute("UPDATE operators SET password_hash = ? WHERE id = ?", (hash_password(ADMIN_PASSWORD), admin["id"]))
         if connection.execute("SELECT COUNT(*) FROM alerts").fetchone()[0] == 0:
             connection.executemany(
                 "INSERT INTO alerts (crew_id, level, title, message, created_at) VALUES (?, ?, ?, ?, datetime('now'))",

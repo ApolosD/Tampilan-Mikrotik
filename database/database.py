@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS crew (
     bandwidth_down_mbps REAL NOT NULL DEFAULT 0,
     bandwidth_up_mbps REAL NOT NULL DEFAULT 0,
     payment_package TEXT,
+    profile TEXT,
+    limit_uptime TEXT,
     start_date TEXT,
     expiry_date TEXT,
     status TEXT NOT NULL DEFAULT 'ACTIVE',
@@ -96,7 +98,8 @@ CREATE TABLE IF NOT EXISTS operators (
     username TEXT UNIQUE NOT NULL,
     display_name TEXT NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('ADMIN', 'OPERATOR', 'VIEWER')),
-    active INTEGER NOT NULL DEFAULT 1
+    active INTEGER NOT NULL DEFAULT 1,
+    password_hash TEXT
 );
 """
 
@@ -111,6 +114,14 @@ def get_connection() -> sqlite3.Connection:
 def initialize_database() -> None:
     with get_connection() as connection:
         connection.executescript(SCHEMA)
+        crew_columns = {row[1] for row in connection.execute("PRAGMA table_info(crew)")}
+        if "profile" not in crew_columns:
+            connection.execute("ALTER TABLE crew ADD COLUMN profile TEXT")
+        if "limit_uptime" not in crew_columns:
+            connection.execute("ALTER TABLE crew ADD COLUMN limit_uptime TEXT")
+        operator_columns = {row[1] for row in connection.execute("PRAGMA table_info(operators)")}
+        if "password_hash" not in operator_columns:
+            connection.execute("ALTER TABLE operators ADD COLUMN password_hash TEXT")
 
 
 def get_active_plan() -> sqlite3.Row:
@@ -156,4 +167,12 @@ def set_internet_mode(mode: str) -> None:
         connection.execute(
             "INSERT INTO system_logs (category, message, operator, created_at) VALUES (?, ?, ?, datetime('now'))",
             ("ADMIN ACTION", f"Internet mode changed to {mode}", "System Operator"),
+        )
+
+
+def log_system_event(category: str, message: str, operator: str) -> None:
+    with get_connection() as connection:
+        connection.execute(
+            "INSERT INTO system_logs (category, message, operator, created_at) VALUES (?, ?, ?, datetime('now'))",
+            (category, message, operator),
         )

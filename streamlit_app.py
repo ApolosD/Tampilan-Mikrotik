@@ -1,7 +1,9 @@
 import streamlit as st
 
 from config.settings import APP_NAME
+from database.auth import authenticate_operator
 from database.database import get_active_plan, initialize_database, set_internet_mode
+from database.database import log_system_event
 from database.seed import seed_database
 from mikrotik.monitoring import get_live_snapshot, sync_hotspot_users
 
@@ -140,8 +142,10 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+if "auth_user" not in st.session_state:
+    st.session_state.auth_user = {"username": "guest", "display_name": "Guest Viewer", "role": "VIEWER", "active": 1}
 if "operator" not in st.session_state:
-    st.session_state.operator = "System Operator"
+    st.session_state.operator = st.session_state.auth_user.get("display_name", "Guest Viewer")
 
 page = st.navigation(
     {
@@ -186,6 +190,41 @@ with st.sidebar:
     if selected_mode and selected_mode != current_plan["mode"]:
         set_internet_mode(selected_mode)
         st.rerun()
+
+    is_admin = st.session_state.auth_user.get("role") == "ADMIN"
+    st.divider()
+    if is_admin:
+        st.caption(f"Admin: {st.session_state.auth_user['display_name']}")
+        if st.button("Logout Admin", use_container_width=True):
+            log_system_event("AUTH LOGOUT", "Logout portal", st.session_state.auth_user["username"])
+            st.session_state.auth_user = {"username": "guest", "display_name": "Guest Viewer", "role": "VIEWER", "active": 1}
+            st.session_state.operator = "Guest Viewer"
+            st.rerun()
+    else:
+        st.caption("Admin portal")
+        with st.form("sidebar_admin_login"):
+            admin_username = st.text_input("Username", autocomplete="username", placeholder="admin")
+            admin_password = st.text_input("Password", type="password", autocomplete="current-password", placeholder="••••••")
+            login_submitted = st.form_submit_button("Login Admin", type="primary", use_container_width=True)
+
+        if login_submitted:
+            username = admin_username.strip()
+            password = admin_password.strip()
+            if not username or not password:
+                st.error("Username dan password wajib diisi.")
+            else:
+                operator = authenticate_operator(username, password)
+                if not operator:
+                    st.error("Login gagal. Periksa username dan password Admin.")
+                elif operator.get("role") != "ADMIN":
+                    st.error("Akun valid, tetapi bukan role Admin.")
+                else:
+                    st.session_state.auth_user = operator
+                    st.session_state.operator = operator.get("display_name", operator.get("username", "System Operator"))
+                    log_system_event("AUTH LOGIN", "Login portal berhasil", operator["username"])
+                    st.success("Login Admin berhasil.")
+                    st.rerun()
+
     st.caption("Local data · RouterOS connection enabled when configured")
 
 page.run()

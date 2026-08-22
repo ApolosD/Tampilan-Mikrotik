@@ -1,10 +1,35 @@
 import streamlit as st
+from time import monotonic
 
 from database.database import get_active_plan, get_connection
 from mikrotik.monitoring import format_memory, get_live_snapshot, interface_flow
 from quota.engine import calculate_quota_status
 from utils.formatters import format_gb
 from utils.ui import render_records
+
+
+def _normalize_ap_name(value: str) -> str:
+    return "".join(ch for ch in value.upper() if ch.isalnum())
+
+
+def _find_ap_flow(snapshot: dict, ap_name: str) -> dict | None:
+    target = _normalize_ap_name(ap_name)
+    for row in snapshot.get("interfaces", []):
+        candidate_name = str(row.get("name", ""))
+        if _normalize_ap_name(candidate_name) == target:
+            return interface_flow(snapshot, candidate_name)
+    return None
+
+
+def _traffic_mbps(current: dict | None, previous: dict | None, elapsed_seconds: float) -> float:
+    if not current or elapsed_seconds <= 0:
+        return 0.0
+    prev_rx = float(previous.get("rx_bytes", 0.0)) if previous else 0.0
+    prev_tx = float(previous.get("tx_bytes", 0.0)) if previous else 0.0
+    current_rx = float(current.get("rx_bytes", 0.0))
+    current_tx = float(current.get("tx_bytes", 0.0))
+    delta_bytes = max((current_rx - prev_rx) + (current_tx - prev_tx), 0.0)
+    return round((delta_bytes * 8.0) / (elapsed_seconds * 1_000_000), 3)
 
 st.title("Network overview")
 st.caption("A single operating view for internet, crew, quota, and network readiness.")
@@ -213,3 +238,44 @@ with st.container(border=True):
             record.update({"Quota": format_gb(status.quota_gb), "Remaining": format_gb(status.remaining_gb), "Display": f"{status.display_usage_percentage:.0f}%"})
         table.append(record)
     render_records(table)
+
+with st.container(border=True):
+    st.subheader("Realtime traffic flow · 3 AP")
+    st.caption("Total throughput RX + TX per AP. Auto refresh setiap 5 detik.")
+
+    @st.fragment(run_every="5s")
+    def render_ap_traffic_graph() -> None:
+        snapshot = get_live_snapshot()
+        st.session_state.live_snapshot = snapshot
+        if snapshot["connection"]["status"] != "ONLINE":
+            st.info("Grafik AP akan aktif setelah koneksi RouterOS ONLINE.")
+            return
+
+        labels = [str(row["name"]) for row in ap_rows[:3]]
+        if not labels:
+            st.info("Belum ada data Access Point di database lokal.")
+            return
+
+        now = monotonic()
+        previous_time = st.session_state.get("ap_graph_time", now)
+        elapsed_seconds = max(now - previous_time, 1.0)
+        previous_flows = st.session_state.get("ap_graph_previous_flows", {})
+
+        sample = {}
+        current_flows = {}
+        for label in labels:
+            flow = _find_ap_flow(snapshot, label)
+            current_flows[label] = flow
+            sample[label] = _traffic_mbps(flow, previous_flows.get(label), elapsed_seconds)
+
+        st.session_state.ap_graph_previous_flows = current_flows
+        st.session_state.ap_graph_time = now
+
+        history = st.session_state.setdefault("ap_graph_history", [])
+        history.append(sample)
+        del history[:-60]
+
+        chart_data = {label: [row.get(label, 0.0) for row in history] for label in labels}
+        st.line_chart(chart_data, use_container_width=True, height=280)
+
+    render_ap_traffic_graph()
