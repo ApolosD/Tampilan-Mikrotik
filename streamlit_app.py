@@ -179,6 +179,20 @@ st.markdown(
         padding: .65rem .65rem .4rem;
         background: linear-gradient(170deg, rgba(18, 49, 72, 0.35), rgba(13, 36, 53, 0.15));
     }
+    [data-testid="stSidebar"] [data-testid="stForm"] label,
+    [data-testid="stSidebar"] [data-testid="stForm"] p {
+        color: #d5e7f5 !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stTextInput"] input {
+        background: #f6efe3 !important;
+        color: #16374f !important;
+        caret-color: #16374f !important;
+        border: 1px solid #e0937b !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stTextInput"] input::placeholder {
+        color: #718494 !important;
+        opacity: 1 !important;
+    }
     .responsive-table { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 12px; }
     .responsive-table table { min-width: 680px; }
     @media (max-width: 768px) {

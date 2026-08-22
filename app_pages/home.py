@@ -95,103 +95,6 @@ def _flow_rate_mbps(flow: dict | None) -> float:
 st.title("Network overview")
 st.caption("A single operating view for internet, crew, quota, and network readiness.")
 
-st.markdown(
-    """
-    <style>
-    .spatial-hero {
-        position: relative;
-        overflow: hidden;
-        isolation: isolate;
-        border-radius: 20px;
-        border: 1px solid rgba(88, 124, 151, 0.28);
-        background:
-            radial-gradient(40rem 20rem at 92% -24%, rgba(86, 145, 255, 0.32), transparent 60%),
-            radial-gradient(35rem 16rem at -8% 100%, rgba(17, 160, 152, 0.22), transparent 60%),
-            linear-gradient(145deg, rgba(245, 251, 255, 0.9) 0%, rgba(230, 241, 252, 0.84) 100%);
-        padding: 1.25rem 11.75rem 1.1rem 1.25rem;
-        min-height: 154px;
-        margin-bottom: 1.1rem;
-        box-shadow: 0 20px 40px rgba(16, 48, 71, 0.14);
-    }
-    .spatial-hero::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background-image:
-            linear-gradient(rgba(121, 151, 173, 0.15) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(121, 151, 173, 0.15) 1px, transparent 1px);
-        background-size: 22px 22px;
-        opacity: .33;
-        mask-image: radial-gradient(circle at 50% 20%, black 0%, transparent 76%);
-    }
-    .spatial-hero h3 {
-        position: relative;
-        z-index: 2;
-        margin: 0;
-        font-size: 1.3rem;
-        color: #122f45;
-        letter-spacing: .01em;
-    }
-    .spatial-hero p {
-        position: relative;
-        z-index: 2;
-        margin: .4rem 0 0;
-        color: #3d6078;
-        font-size: .93rem;
-    }
-    .depth-stack {
-        position: absolute;
-        right: 1rem;
-        top: 1rem;
-        width: 170px;
-        height: 96px;
-        perspective: 1100px;
-        z-index: 1;
-        pointer-events: none;
-    }
-    .depth-plane {
-        position: absolute;
-        inset: 0;
-        border-radius: 14px;
-        border: 1px solid rgba(82, 125, 153, 0.26);
-        background: linear-gradient(140deg, rgba(255,255,255,.78), rgba(213,235,254,.58));
-        backdrop-filter: blur(2px);
-    }
-    .depth-plane.one { transform: rotateX(56deg) rotateZ(-24deg) translate3d(0, 12px, 0); opacity: .56; }
-    .depth-plane.two { transform: rotateX(56deg) rotateZ(-24deg) translate3d(-8px, 2px, 0); opacity: .75; }
-    .depth-plane.three { transform: rotateX(56deg) rotateZ(-24deg) translate3d(-16px, -8px, 0); opacity: .92; }
-    .spatial-kpi-grid {
-        position: relative;
-        z-index: 2;
-        display: grid;
-        grid-template-columns: repeat(4, minmax(120px, 1fr));
-        gap: .7rem;
-        margin-top: .9rem;
-    }
-    .spatial-kpi {
-        border-radius: 14px;
-        border: 1px solid rgba(78, 117, 143, 0.32);
-        background: linear-gradient(165deg, rgba(255,255,255,.88), rgba(232,244,255,.68));
-        padding: .65rem .72rem;
-        transform-style: preserve-3d;
-        transform: translateZ(0);
-        box-shadow: 0 8px 20px rgba(16, 54, 80, 0.1);
-    }
-    .spatial-kpi span { display: block; color: #567188; font-size: .72rem; letter-spacing: .03em; }
-    .spatial-kpi strong { color: #112f45; font-size: 1rem; }
-    @media (max-width: 768px) {
-        .spatial-hero { padding-right: 1.1rem; min-height: auto; }
-        .depth-stack { display: none; }
-        .spatial-kpi-grid { grid-template-columns: repeat(2, minmax(110px, 1fr)); }
-    }
-    @media (max-width: 480px) {
-        .spatial-kpi-grid { grid-template-columns: 1fr; }
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
 plan = get_active_plan()
 live = st.session_state.get("live_snapshot")
 if live is None:
@@ -217,28 +120,12 @@ remaining_gb = max(total_gb - used_gb, 0)
 blocked_count = sum(status.status == "BLOCKED" for status in statuses) if plan["mode"] == "LIMITED" else sum(row["status"] == "SUSPENDED" for row in crew_rows)
 online_count = len(live["active_users"]) if connection_status["status"] == "ONLINE" else sum(row["status"] == "ONLINE" for row in crew_rows)
 overview_sources = _select_chart_sources(live, ap_rows)
-current_bandwidth_mbps = round(sum(_flow_rate_mbps(item["flow"]) for item in overview_sources), 3)
 bandwidth_source_count = len(overview_sources)
-
-st.markdown(
-    f"""
-    <section class="spatial-hero">
-        <div class="depth-stack" aria-hidden="true">
-            <div class="depth-plane one"></div>
-            <div class="depth-plane two"></div>
-            <div class="depth-plane three"></div>
-        </div>
-        <h3>Spatial command surface</h3>
-        <p>Live state RouterOS, kuota, dan bandwidth tampil dalam satu command surface yang ringkas dan operasional.</p>
-    </section>
-    """,
-    unsafe_allow_html=True,
-)
 
 with st.container(horizontal=True):
     st.metric("MikroTik", connection_status["status"], border=True)
     st.metric("Internet mode", plan["mode"], border=True)
-    st.metric("Current bandwidth", f"{current_bandwidth_mbps:.3f} Mbps", border=True)
+    st.metric("Crew online", online_count, border=True)
     if plan["mode"] == "LIMITED":
         st.metric("Master quota", format_gb(total_gb), border=True)
         st.metric("Remaining", format_gb(remaining_gb), border=True)
@@ -280,20 +167,31 @@ with right:
 
 with st.container(border=True):
     st.subheader("Usage by crew")
-    table = []
+    summary_rows = []
+    detail_rows = []
     for row in crew_rows:
         record = {
             "User": row["username"],
             "IP address": row["ip_address"],
             "MAC address": row["mac_address"] or "-",
             "Data used": format_gb(row["used_gb"]),
-            "Status": row["status"] if plan["mode"] == "UNLIMITED" else statuses[len(table)].status,
+            "Status": row["status"] if plan["mode"] == "UNLIMITED" else statuses[len(detail_rows)].status,
         }
         if plan["mode"] == "LIMITED":
-            status = statuses[len(table)]
+            status = statuses[len(detail_rows)]
             record.update({"Quota": format_gb(status.quota_gb), "Remaining": format_gb(status.remaining_gb), "Display": f"{status.display_usage_percentage:.0f}%"})
-        table.append(record)
-    render_records(table)
+        detail_rows.append(record)
+        summary_rows.append(
+            {
+                "User": row["username"],
+                "Data used": format_gb(row["used_gb"]),
+                "Status": record["Status"],
+            }
+        )
+
+    render_records(summary_rows[:8])
+    with st.expander("Show detailed usage table"):
+        render_records(detail_rows)
 
 with st.container(border=True):
     st.subheader("Realtime traffic flow · 3 AP")
@@ -340,6 +238,13 @@ with st.container(border=True):
             current_flows[label] = flow
             sample[label] = _traffic_mbps(flow, previous_flows.get(label), elapsed_seconds)
 
+        history = st.session_state.setdefault("ap_graph_history", [])
+        if not history:
+            history.append({name: 0.0 for name in labels})
+        history.append(sample)
+        del history[:-60]
+        st.session_state.ap_graph_latest_sample = sample
+
         live_cols = st.columns(len(labels))
         for col, label in zip(live_cols, labels):
             with col:
@@ -356,12 +261,6 @@ with st.container(border=True):
 
         st.session_state.ap_graph_previous_flows = current_flows
         st.session_state.ap_graph_time = now
-
-        history = st.session_state.setdefault("ap_graph_history", [])
-        if not history:
-            history.append({name: 0.0 for name in labels})
-        history.append(sample)
-        del history[:-60]
 
         chart_points = []
         for index, row in enumerate(history):
