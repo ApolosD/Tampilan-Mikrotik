@@ -1,11 +1,13 @@
 import streamlit as st
 from time import monotonic
+import altair as alt
 
 from database.database import get_active_plan, get_connection
 from mikrotik.monitoring import format_memory, get_live_snapshot, interface_flow
 from quota.engine import calculate_quota_status
 from utils.formatters import format_gb
 from utils.ui import render_records
+from utils.user_filters import keep_visible_rows
 
 
 def _normalize_ap_name(value: str) -> str:
@@ -73,6 +75,22 @@ def _traffic_mbps(current: dict | None, previous: dict | None, elapsed_seconds: 
     current_tx = float(current.get("tx_bytes", 0.0))
     delta_bytes = max((current_rx - prev_rx) + (current_tx - prev_tx), 0.0)
     return round((delta_bytes * 8.0) / (elapsed_seconds * 1_000_000), 3)
+
+
+def _to_float(value: object) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _flow_rate_mbps(flow: dict | None) -> float:
+    if not flow:
+        return 0.0
+    rx = _to_float(flow.get("rx_rate"))
+    tx = _to_float(flow.get("tx_rate"))
+    # RouterOS rate fields are bits per second.
+    return max((rx + tx) / 1_000_000, 0.0)
 
 st.title("Network overview")
 st.caption("A single operating view for internet, crew, quota, and network readiness.")
@@ -186,6 +204,8 @@ if live["connection"]["status"] == "ONLINE":
     live_usernames = {str(item.get("name", "")) for item in live["users"]}
     crew_rows = [row for row in crew_rows if row["username"] in live_usernames]
 
+crew_rows = keep_visible_rows(crew_rows, username_key="username")
+
 connection_status = live["connection"]
 ap_flows = [interface_flow(live, str(row.get("name"))) for row in live.get("interfaces", []) if str(row.get("name", "")).upper().startswith("AP ")]
 upstream_flow = interface_flow(live, "ether1")
@@ -196,10 +216,9 @@ total_gb = float(plan["total_quota_gb"])
 remaining_gb = max(total_gb - used_gb, 0)
 blocked_count = sum(status.status == "BLOCKED" for status in statuses) if plan["mode"] == "LIMITED" else sum(row["status"] == "SUSPENDED" for row in crew_rows)
 online_count = len(live["active_users"]) if connection_status["status"] == "ONLINE" else sum(row["status"] == "ONLINE" for row in crew_rows)
-
-router_label = connection_status["status"]
-plan_label = plan["mode"]
-upstream_label = "ACTIVE" if upstream_flow and upstream_flow["running"] and not upstream_flow["disabled"] else "INACTIVE"
+overview_sources = _select_chart_sources(live, ap_rows)
+current_bandwidth_mbps = round(sum(_flow_rate_mbps(item["flow"]) for item in overview_sources), 3)
+bandwidth_source_count = len(overview_sources)
 
 st.markdown(
     f"""
@@ -210,13 +229,7 @@ st.markdown(
             <div class="depth-plane three"></div>
         </div>
         <h3>Spatial command surface</h3>
-        <p>Live state dari RouterOS, quota, dan AP ditampilkan sebagai satu lapisan operasional dengan depth visual.</p>
-        <div class="spatial-kpi-grid">
-            <div class="spatial-kpi"><span>Router</span><strong>{router_label}</strong></div>
-            <div class="spatial-kpi"><span>Internet mode</span><strong>{plan_label}</strong></div>
-            <div class="spatial-kpi"><span>Crew online</span><strong>{online_count}</strong></div>
-            <div class="spatial-kpi"><span>Upstream</span><strong>{upstream_label}</strong></div>
-        </div>
+        <p>Live state RouterOS, kuota, dan bandwidth tampil dalam satu command surface yang ringkas dan operasional.</p>
     </section>
     """,
     unsafe_allow_html=True,
@@ -225,16 +238,16 @@ st.markdown(
 with st.container(horizontal=True):
     st.metric("MikroTik", connection_status["status"], border=True)
     st.metric("Internet mode", plan["mode"], border=True)
+    st.metric("Current bandwidth", f"{current_bandwidth_mbps:.3f} Mbps", border=True)
     if plan["mode"] == "LIMITED":
         st.metric("Master quota", format_gb(total_gb), border=True)
         st.metric("Remaining", format_gb(remaining_gb), border=True)
     else:
         st.metric("Network policy", "No quota cap", border=True)
-        st.metric("Traffic state", "Monitoring", border=True)
+        st.metric("Sources", f"{bandwidth_source_count} interfaces", border=True)
     live_ap_count = sum(flow is not None and flow["running"] and not flow["disabled"] for flow in ap_flows)
     live_ap_total = len(ap_flows) if ap_flows else len(ap_rows)
     st.metric("AP online", f"{live_ap_count}/{live_ap_total}", border=True)
-    st.metric("Crew online", online_count, border=True)
     st.metric("Blocked", blocked_count, border=True)
 
 left, right = st.columns(2)
@@ -300,6 +313,12 @@ with st.container(border=True):
             st.info("Belum ada data Access Point di database lokal.")
             return
 
+        previous_labels = st.session_state.get("ap_graph_labels", [])
+        if previous_labels != labels:
+            st.session_state.ap_graph_history = []
+            st.session_state.ap_graph_previous_flows = {}
+        st.session_state.ap_graph_labels = labels
+
         source_types = {item["source"] for item in chart_sources}
         if source_types == {"mapped"}:
             st.caption("Sumber interface: AP mapping dari inventory lokal.")
@@ -326,6 +345,15 @@ with st.container(border=True):
             with col:
                 col.metric(label, f"{sample[label]:.3f} Mbps", border=True)
 
+        total_current = sum(sample.values())
+        top_label = max(sample, key=sample.get)
+        top_value = sample[top_label]
+        history_peak = max((max(row.get(label, 0.0) for label in labels) for row in history), default=0.0)
+        summary_left, summary_mid, summary_right = st.columns(3)
+        summary_left.metric("Current total", f"{total_current:.3f} Mbps", border=True)
+        summary_mid.metric("Peak (last 60)", f"{history_peak:.3f} Mbps", border=True)
+        summary_right.metric("Top AP now", f"{top_label} · {top_value:.3f} Mbps", border=True)
+
         st.session_state.ap_graph_previous_flows = current_flows
         st.session_state.ap_graph_time = now
 
@@ -335,7 +363,33 @@ with st.container(border=True):
         history.append(sample)
         del history[:-60]
 
-        chart_data = {label: [row.get(label, 0.0) for row in history] for label in labels}
-        st.line_chart(chart_data, use_container_width=True, height=280)
+        chart_points = []
+        for index, row in enumerate(history):
+            for label in labels:
+                chart_points.append({"sample": index, "ap": label, "mbps": row.get(label, 0.0)})
+
+        chart = (
+            alt.Chart(alt.Data(values=chart_points))
+            .mark_line(strokeWidth=3, interpolate="monotone")
+            .encode(
+                x=alt.X("sample:Q", title="Sample (5s interval)"),
+                y=alt.Y("mbps:Q", title="Throughput (Mbps)", scale=alt.Scale(zero=True)),
+                color=alt.Color(
+                    "ap:N",
+                    title="Access point",
+                    scale=alt.Scale(range=["#0b6efd", "#14b8a6", "#f97316", "#ef4444", "#8b5cf6"]),
+                ),
+                tooltip=[
+                    alt.Tooltip("ap:N", title="AP"),
+                    alt.Tooltip("sample:Q", title="Sample"),
+                    alt.Tooltip("mbps:Q", title="Mbps", format=".3f"),
+                ],
+            )
+            .properties(height=320)
+            .configure_view(stroke="#d7e6f5", fill="#f8fbff")
+            .configure_axis(labelColor="#2b3e50", titleColor="#2b3e50", gridColor="#e5eef8", domainColor="#c8d8e9")
+            .configure_legend(labelColor="#2b3e50", titleColor="#2b3e50", orient="bottom")
+        )
+        st.altair_chart(chart, use_container_width=True)
 
     render_ap_traffic_graph()

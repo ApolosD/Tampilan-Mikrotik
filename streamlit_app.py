@@ -1,4 +1,5 @@
 import streamlit as st
+from time import monotonic
 
 from config.settings import APP_NAME
 from database.auth import authenticate_operator
@@ -9,11 +10,35 @@ from mikrotik.monitoring import get_live_snapshot, sync_hotspot_users
 
 st.set_page_config(page_title=APP_NAME, page_icon=":material/network_check:", layout="wide")
 
-initialize_database()
-seed_database()
-live_snapshot = get_live_snapshot()
-sync_hotspot_users(live_snapshot)
-st.session_state.live_snapshot = live_snapshot
+if "_db_ready" not in st.session_state:
+    initialize_database()
+    seed_database()
+    st.session_state._db_ready = True
+
+
+def _refresh_live_snapshot(force: bool = False) -> None:
+    now = monotonic()
+    refresh_ttl_seconds = 8.0
+    sync_ttl_seconds = 30.0
+    has_snapshot = "live_snapshot" in st.session_state
+    last_refresh = float(st.session_state.get("live_snapshot_ts", 0.0))
+    should_refresh = force or (not has_snapshot) or (now - last_refresh >= refresh_ttl_seconds)
+
+    if not should_refresh:
+        return
+
+    snapshot = get_live_snapshot()
+    st.session_state.live_snapshot = snapshot
+    st.session_state.live_snapshot_ts = now
+
+    if snapshot["connection"]["status"] == "ONLINE":
+        last_sync = float(st.session_state.get("hotspot_sync_ts", 0.0))
+        if force or (now - last_sync >= sync_ttl_seconds):
+            sync_hotspot_users(snapshot)
+            st.session_state.hotspot_sync_ts = now
+
+
+_refresh_live_snapshot()
 
 st.markdown(
     """

@@ -2,6 +2,7 @@ import streamlit as st
 
 from mikrotik.monitoring import format_bytes, get_live_snapshot, normalize_hotspot_users
 from utils.ui import render_records
+from utils.user_filters import is_hidden_username
 
 st.title("Active users")
 st.caption("Live sessions read from MikroTik Hotspot active users.")
@@ -23,6 +24,8 @@ with st.container(horizontal=True):
 records = []
 for active in active_users:
     username = str(active.get("user", ""))
+    if is_hidden_username(username):
+        continue
     user = active_by_name.get(username, {})
     session_bytes = float(active.get("bytes-in", 0) or 0) + float(active.get("bytes-out", 0) or 0)
     records.append({

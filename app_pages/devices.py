@@ -2,6 +2,7 @@ import streamlit as st
 
 from database.database import get_connection
 from utils.ui import render_records
+from utils.user_filters import keep_visible_rows
 
 st.title("Devices & sessions")
 st.caption("Crew-to-device mapping for IP, MAC, AP, and online state.")
@@ -11,6 +12,8 @@ live = st.session_state.get("live_snapshot")
 if live and live["connection"]["status"] == "ONLINE":
     live_usernames = {str(item.get("name", "")) for item in live["users"]}
     rows = [row for row in rows if row["username"] in live_usernames]
+
+rows = keep_visible_rows(rows, username_key="username")
 render_records([
     {"User": row["username"], "IP": row["ip_address"], "MAC": row["mac_address"] or "-", "Device": row["device"] or "-", "AP": row["access_point"], "State": row["status"]}
     for row in rows

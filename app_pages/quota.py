@@ -5,6 +5,7 @@ from quota.allocation import allocation_summary, equal_allocation
 from quota.transactions import add_quota
 from utils.formatters import format_gb
 from utils.ui import render_records
+from utils.user_filters import is_hidden_username
 
 st.title("Quota control")
 plan = get_active_plan()
@@ -18,6 +19,8 @@ live = st.session_state.get("live_snapshot")
 if live and live["connection"]["status"] == "ONLINE":
     live_usernames = {str(item.get("name", "")) for item in live["users"]}
     rows = [row for row in rows if row["crew_id"].replace("MT-", "") in live_usernames or row["name"] in live_usernames]
+
+rows = [row for row in rows if not is_hidden_username(str(row["name"])) and not is_hidden_username(str(row["crew_id"]).replace("MT-", ""))]
 
 allocation_mode = st.segmented_control("Allocation model", ["Custom", "Equal", "Shared pool"], default="Custom")
 if allocation_mode == "Equal":

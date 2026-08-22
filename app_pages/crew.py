@@ -4,6 +4,7 @@ from database.database import get_active_plan, get_connection
 from quota.engine import calculate_quota_status
 from utils.formatters import format_gb
 from utils.ui import render_records
+from utils.user_filters import keep_visible_rows
 
 st.title("Crew management")
 st.caption("Profile, device mapping, bandwidth policy, and quota state in one operational table.")
@@ -16,6 +17,8 @@ with get_connection() as connection:
 if live and live["connection"]["status"] == "ONLINE":
     live_usernames = {str(item.get("name", "")) for item in live["users"]}
     rows = [row for row in rows if row["username"] in live_usernames]
+
+rows = keep_visible_rows(rows, username_key="username")
 
 records = []
 for row in rows:
