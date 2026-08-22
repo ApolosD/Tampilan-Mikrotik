@@ -64,15 +64,19 @@ st.markdown(
             linear-gradient(155deg, #edf3fa 0%, #f8fbff 44%, #eef5fc 100%);
         background-attachment: fixed;
     }
-    [data-testid="stHeader"],
-    [data-testid="stToolbar"],
+    /* Keep stHeader/stToolbar visible: they contain the button that reopens a collapsed sidebar on mobile. */
     [data-testid="stDecoration"],
-    #MainMenu,
-    header {
+    #MainMenu {
         display: none !important;
         visibility: hidden !important;
         height: 0 !important;
     }
+    [data-testid="stHeader"] {
+        background: transparent !important;
+        height: 2.75rem !important;
+        min-height: 2.75rem !important;
+    }
+    [data-testid="stToolbar"] { right: .35rem !important; }
     [data-testid="stAppViewContainer"] > .main {
         padding-top: 0 !important;
     }
