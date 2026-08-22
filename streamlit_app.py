@@ -309,6 +309,7 @@ page = st.navigation(
         ],
         "Management": [
             st.Page("app_pages/crew.py", title="Crew", icon=":material/group:"),
+            st.Page("app_pages/user_manager.py", title="User manager", icon=":material/person_add:"),
             st.Page("app_pages/active_users.py", title="Active users", icon=":material/person_search:"),
             st.Page("app_pages/devices.py", title="Devices", icon=":material/devices:"),
             st.Page("app_pages/access_points.py", title="Access points", icon=":material/wifi:"),

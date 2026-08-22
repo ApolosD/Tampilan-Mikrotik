@@ -59,6 +59,7 @@ def create_hotspot_user(
     shared_users: int = 1,
     limit_uptime: str = "",
     comment: str = "",
+    limit_total_gb: float = 0,
 ) -> None:
     username = username.strip()
     if not username:
@@ -67,6 +68,8 @@ def create_hotspot_user(
         raise ValueError("Password wajib diisi")
     if shared_users < 1:
         raise ValueError("Shared users minimal 1")
+    if limit_total_gb < 0:
+        raise ValueError("Batasan data tidak boleh negatif")
 
     with open_connection() as api:
         users = api.path("ip", "hotspot", "user")
@@ -84,6 +87,8 @@ def create_hotspot_user(
             payload["limit-uptime"] = limit_uptime.strip()
         if comment.strip():
             payload["comment"] = comment.strip()
+        if limit_total_gb > 0:
+            payload["limit-bytes-total"] = str(int(limit_total_gb * 1024**3))
         users.add(**payload)
 
 
@@ -96,6 +101,7 @@ def edit_hotspot_user(
     limit_uptime: str | None = None,
     comment: str | None = None,
     disabled: bool | None = None,
+    limit_total_gb: float | None = None,
 ) -> None:
     username = username.strip()
     if not username:
@@ -104,6 +110,8 @@ def edit_hotspot_user(
         raise ValueError("Shared users minimal 1")
     if password is not None and len(password.strip()) > 0 and len(password.strip()) < 4:
         raise ValueError("Password hotspot minimal 4 karakter.")
+    if limit_total_gb is not None and limit_total_gb < 0:
+        raise ValueError("Batasan data tidak boleh negatif")
 
     with open_connection() as api:
         users = api.path("ip", "hotspot", "user")
@@ -128,6 +136,8 @@ def edit_hotspot_user(
                 payload["comment"] = comment.strip()
             if disabled is not None:
                 payload["disabled"] = "yes" if disabled else "no"
+            if limit_total_gb is not None:
+                payload["limit-bytes-total"] = str(int(limit_total_gb * 1024**3)) if limit_total_gb > 0 else "0"
 
             if not payload:
                 return
