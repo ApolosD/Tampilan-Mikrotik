@@ -1,0 +1,215 @@
+import streamlit as st
+
+from database.database import get_active_plan, get_connection
+from mikrotik.monitoring import format_memory, get_live_snapshot, interface_flow
+from quota.engine import calculate_quota_status
+from utils.formatters import format_gb
+from utils.ui import render_records
+
+st.title("Network overview")
+st.caption("A single operating view for internet, crew, quota, and network readiness.")
+
+st.markdown(
+    """
+    <style>
+    .spatial-hero {
+        position: relative;
+        overflow: hidden;
+        isolation: isolate;
+        border-radius: 20px;
+        border: 1px solid rgba(88, 124, 151, 0.28);
+        background:
+            radial-gradient(40rem 20rem at 92% -24%, rgba(86, 145, 255, 0.32), transparent 60%),
+            radial-gradient(35rem 16rem at -8% 100%, rgba(17, 160, 152, 0.22), transparent 60%),
+            linear-gradient(145deg, rgba(245, 251, 255, 0.9) 0%, rgba(230, 241, 252, 0.84) 100%);
+        padding: 1.25rem 11.75rem 1.1rem 1.25rem;
+        min-height: 154px;
+        margin-bottom: 1.1rem;
+        box-shadow: 0 20px 40px rgba(16, 48, 71, 0.14);
+    }
+    .spatial-hero::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image:
+            linear-gradient(rgba(121, 151, 173, 0.15) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(121, 151, 173, 0.15) 1px, transparent 1px);
+        background-size: 22px 22px;
+        opacity: .33;
+        mask-image: radial-gradient(circle at 50% 20%, black 0%, transparent 76%);
+    }
+    .spatial-hero h3 {
+        position: relative;
+        z-index: 2;
+        margin: 0;
+        font-size: 1.3rem;
+        color: #122f45;
+        letter-spacing: .01em;
+    }
+    .spatial-hero p {
+        position: relative;
+        z-index: 2;
+        margin: .4rem 0 0;
+        color: #3d6078;
+        font-size: .93rem;
+    }
+    .depth-stack {
+        position: absolute;
+        right: 1rem;
+        top: 1rem;
+        width: 170px;
+        height: 96px;
+        perspective: 1100px;
+        z-index: 1;
+        pointer-events: none;
+    }
+    .depth-plane {
+        position: absolute;
+        inset: 0;
+        border-radius: 14px;
+        border: 1px solid rgba(82, 125, 153, 0.26);
+        background: linear-gradient(140deg, rgba(255,255,255,.78), rgba(213,235,254,.58));
+        backdrop-filter: blur(2px);
+    }
+    .depth-plane.one { transform: rotateX(56deg) rotateZ(-24deg) translate3d(0, 12px, 0); opacity: .56; }
+    .depth-plane.two { transform: rotateX(56deg) rotateZ(-24deg) translate3d(-8px, 2px, 0); opacity: .75; }
+    .depth-plane.three { transform: rotateX(56deg) rotateZ(-24deg) translate3d(-16px, -8px, 0); opacity: .92; }
+    .spatial-kpi-grid {
+        position: relative;
+        z-index: 2;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(120px, 1fr));
+        gap: .7rem;
+        margin-top: .9rem;
+    }
+    .spatial-kpi {
+        border-radius: 14px;
+        border: 1px solid rgba(78, 117, 143, 0.32);
+        background: linear-gradient(165deg, rgba(255,255,255,.88), rgba(232,244,255,.68));
+        padding: .65rem .72rem;
+        transform-style: preserve-3d;
+        transform: translateZ(0);
+        box-shadow: 0 8px 20px rgba(16, 54, 80, 0.1);
+    }
+    .spatial-kpi span { display: block; color: #567188; font-size: .72rem; letter-spacing: .03em; }
+    .spatial-kpi strong { color: #112f45; font-size: 1rem; }
+    @media (max-width: 768px) {
+        .spatial-hero { padding-right: 1.1rem; min-height: auto; }
+        .depth-stack { display: none; }
+        .spatial-kpi-grid { grid-template-columns: repeat(2, minmax(110px, 1fr)); }
+    }
+    @media (max-width: 480px) {
+        .spatial-kpi-grid { grid-template-columns: 1fr; }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+plan = get_active_plan()
+live = st.session_state.get("live_snapshot")
+if live is None:
+    live = get_live_snapshot()
+with get_connection() as connection:
+    crew_rows = connection.execute("SELECT * FROM crew ORDER BY crew_id").fetchall()
+    ap_rows = connection.execute("SELECT * FROM access_points ORDER BY name").fetchall()
+
+if live["connection"]["status"] == "ONLINE":
+    live_usernames = {str(item.get("name", "")) for item in live["users"]}
+    crew_rows = [row for row in crew_rows if row["username"] in live_usernames]
+
+connection_status = live["connection"]
+ap_flows = [interface_flow(live, str(row.get("name"))) for row in live.get("interfaces", []) if str(row.get("name", "")).upper().startswith("AP ")]
+upstream_flow = interface_flow(live, "ether1")
+statuses = [calculate_quota_status(row["quota_gb"], row["used_gb"], blocked=bool(row["blocked"])) for row in crew_rows] if plan["mode"] == "LIMITED" else []
+
+used_gb = float(plan["used_gb"])
+total_gb = float(plan["total_quota_gb"])
+remaining_gb = max(total_gb - used_gb, 0)
+blocked_count = sum(status.status == "BLOCKED" for status in statuses) if plan["mode"] == "LIMITED" else sum(row["status"] == "SUSPENDED" for row in crew_rows)
+online_count = len(live["active_users"]) if connection_status["status"] == "ONLINE" else sum(row["status"] == "ONLINE" for row in crew_rows)
+
+router_label = connection_status["status"]
+plan_label = plan["mode"]
+upstream_label = "ACTIVE" if upstream_flow and upstream_flow["running"] and not upstream_flow["disabled"] else "INACTIVE"
+
+st.markdown(
+    f"""
+    <section class="spatial-hero">
+        <div class="depth-stack" aria-hidden="true">
+            <div class="depth-plane one"></div>
+            <div class="depth-plane two"></div>
+            <div class="depth-plane three"></div>
+        </div>
+        <h3>Spatial command surface</h3>
+        <p>Live state dari RouterOS, quota, dan AP ditampilkan sebagai satu lapisan operasional dengan depth visual.</p>
+        <div class="spatial-kpi-grid">
+            <div class="spatial-kpi"><span>Router</span><strong>{router_label}</strong></div>
+            <div class="spatial-kpi"><span>Internet mode</span><strong>{plan_label}</strong></div>
+            <div class="spatial-kpi"><span>Crew online</span><strong>{online_count}</strong></div>
+            <div class="spatial-kpi"><span>Upstream</span><strong>{upstream_label}</strong></div>
+        </div>
+    </section>
+    """,
+    unsafe_allow_html=True,
+)
+
+with st.container(horizontal=True):
+    st.metric("MikroTik", connection_status["status"], border=True)
+    st.metric("Internet mode", plan["mode"], border=True)
+    if plan["mode"] == "LIMITED":
+        st.metric("Master quota", format_gb(total_gb), border=True)
+        st.metric("Remaining", format_gb(remaining_gb), border=True)
+    else:
+        st.metric("Network policy", "No quota cap", border=True)
+        st.metric("Traffic state", "Monitoring", border=True)
+    live_ap_count = sum(flow is not None and flow["running"] and not flow["disabled"] for flow in ap_flows)
+    live_ap_total = len(ap_flows) if ap_flows else len(ap_rows)
+    st.metric("AP online", f"{live_ap_count}/{live_ap_total}", border=True)
+    st.metric("Crew online", online_count, border=True)
+    st.metric("Blocked", blocked_count, border=True)
+
+left, right = st.columns(2)
+with left:
+    with st.container(border=True):
+        if plan["mode"] == "LIMITED":
+            st.subheader("Master quota")
+            st.progress(min(used_gb / total_gb, 1.0) if total_gb else 0.0)
+            st.write(f"{format_gb(used_gb)} used of {format_gb(total_gb)}")
+            st.caption("Actual package usage is separate from each crew's display status.")
+        else:
+            st.subheader("Unlimited network")
+            st.markdown("### :material/all_inclusive: Open access")
+            st.caption("Quota deductions, warnings, and automatic quota blocking are paused in this mode.")
+
+with right:
+    with st.container(border=True):
+        st.subheader("Crew status")
+        status_counts = {}
+        for row in crew_rows:
+            status_counts[row["status"]] = status_counts.get(row["status"], 0) + 1
+        for status, count in sorted(status_counts.items()):
+            st.write(f"**{status}** · {count} crew")
+        if connection_status["status"] == "ONLINE":
+            resource = live["resource"]
+            st.caption(f"RouterOS {connection_status['version']} · CPU {resource.get('cpu-load', 'n/a')}% · RAM {format_memory(resource)} · Uptime {resource.get('uptime', 'n/a')}")
+            st.caption(f"Starlink upstream ether1: {'ACTIVE' if upstream_flow and upstream_flow['running'] and not upstream_flow['disabled'] else 'INACTIVE'}")
+        else:
+            st.caption(connection_status["error"])
+
+with st.container(border=True):
+    st.subheader("Usage by crew")
+    table = []
+    for row in crew_rows:
+        record = {
+            "User": row["username"],
+            "IP address": row["ip_address"],
+            "MAC address": row["mac_address"] or "-",
+            "Data used": format_gb(row["used_gb"]),
+            "Status": row["status"] if plan["mode"] == "UNLIMITED" else statuses[len(table)].status,
+        }
+        if plan["mode"] == "LIMITED":
+            status = statuses[len(table)]
+            record.update({"Quota": format_gb(status.quota_gb), "Remaining": format_gb(status.remaining_gb), "Display": f"{status.display_usage_percentage:.0f}%"})
+        table.append(record)
+    render_records(table)
