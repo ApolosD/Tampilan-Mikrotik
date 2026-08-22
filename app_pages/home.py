@@ -268,12 +268,22 @@ with st.container(border=True):
             current_flows[label] = flow
             sample[label] = _traffic_mbps(flow, previous_flows.get(label), elapsed_seconds)
 
+        live_cols = st.columns(len(labels))
+        for col, label in zip(live_cols, labels):
+            with col:
+                col.metric(label, f"{sample[label]:.3f} Mbps", border=True)
+
         st.session_state.ap_graph_previous_flows = current_flows
         st.session_state.ap_graph_time = now
 
         history = st.session_state.setdefault("ap_graph_history", [])
+        if not history:
+            history.append({name: 0.0 for name in labels})
         history.append(sample)
         del history[:-60]
+
+        if all(current_flows.get(name) is None for name in labels):
+            st.warning("Interface AP belum terpetakan di RouterOS. Grafik tampil dengan baseline sampai interface AP terdeteksi.")
 
         chart_data = {label: [row.get(label, 0.0) for row in history] for label in labels}
         st.line_chart(chart_data, use_container_width=True, height=280)

@@ -112,6 +112,48 @@ st.markdown(
         transform: translateY(-2px);
         box-shadow: 0 10px 20px rgba(18, 49, 73, 0.14);
     }
+    [data-testid="stSidebar"] [data-testid="stSegmentedControl"] {
+        background: rgba(11, 30, 44, 0.45);
+        border: 1px solid rgba(214, 230, 243, 0.2);
+        border-radius: 12px;
+        padding: 2px;
+    }
+    [data-testid="stSidebar"] [data-testid="stSegmentedControl"] button {
+        border-radius: 10px !important;
+        color: #d4e3ef !important;
+        font-weight: 700 !important;
+        letter-spacing: .02em;
+    }
+    [data-testid="stSidebar"] [data-testid="stSegmentedControl"] button[aria-pressed="true"] {
+        background: linear-gradient(160deg, #f06e46 0%, #d14f2c 100%) !important;
+        color: #ffffff !important;
+        border: 1px solid #f3a084 !important;
+        box-shadow: 0 4px 12px rgba(209, 79, 44, 0.35);
+    }
+    [data-testid="stSidebar"] [data-testid="stSegmentedControl"] button[aria-pressed="false"] {
+        background: transparent !important;
+        color: #c5d9e8 !important;
+        border: 1px solid transparent !important;
+    }
+    [data-testid="stSidebar"] .admin-portal-title {
+        text-align: center;
+        font-weight: 700;
+        color: #e6f0f8;
+        letter-spacing: .03em;
+        margin: .15rem 0 .45rem;
+    }
+    [data-testid="stSidebar"] .admin-portal-subtitle {
+        text-align: center;
+        color: #b7cddd;
+        font-size: .8rem;
+        margin: 0 0 .6rem;
+    }
+    [data-testid="stSidebar"] [data-testid="stForm"] {
+        border: 1px solid rgba(179, 206, 224, 0.3);
+        border-radius: 14px;
+        padding: .65rem .65rem .4rem;
+        background: linear-gradient(170deg, rgba(18, 49, 72, 0.35), rgba(13, 36, 53, 0.15));
+    }
     .responsive-table { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 12px; }
     .responsive-table table { min-width: 680px; }
     @media (max-width: 768px) {
@@ -179,33 +221,25 @@ page = st.navigation(
 )
 
 with st.sidebar:
-    st.caption("Internet management system")
-    st.divider()
-    current_plan = get_active_plan()
-    selected_mode = st.segmented_control(
-        "Internet mode",
-        ["LIMITED", "UNLIMITED"],
-        default=current_plan["mode"],
-    )
-    if selected_mode and selected_mode != current_plan["mode"]:
-        set_internet_mode(selected_mode)
-        st.rerun()
-
     is_admin = st.session_state.auth_user.get("role") == "ADMIN"
-    st.divider()
+
+    st.markdown('<div class="admin-portal-title">Admin portal</div>', unsafe_allow_html=True)
+    st.markdown('<div class="admin-portal-subtitle">Masuk sebagai Admin untuk kontrol penuh.</div>', unsafe_allow_html=True)
+
     if is_admin:
-        st.caption(f"Admin: {st.session_state.auth_user['display_name']}")
+        st.caption(f"Login as: {st.session_state.auth_user['display_name']}")
         if st.button("Logout Admin", use_container_width=True):
             log_system_event("AUTH LOGOUT", "Logout portal", st.session_state.auth_user["username"])
             st.session_state.auth_user = {"username": "guest", "display_name": "Guest Viewer", "role": "VIEWER", "active": 1}
             st.session_state.operator = "Guest Viewer"
             st.rerun()
     else:
-        st.caption("Admin portal")
-        with st.form("sidebar_admin_login"):
-            admin_username = st.text_input("Username", autocomplete="username", placeholder="admin")
-            admin_password = st.text_input("Password", type="password", autocomplete="current-password", placeholder="••••••")
-            login_submitted = st.form_submit_button("Login Admin", type="primary", use_container_width=True)
+        _, center_col, _ = st.columns([0.08, 1.0, 0.08])
+        with center_col:
+            with st.form("sidebar_admin_login"):
+                admin_username = st.text_input("Username", autocomplete="username", placeholder="admin")
+                admin_password = st.text_input("Password", type="password", autocomplete="current-password", placeholder="••••••")
+                login_submitted = st.form_submit_button("Login Admin", type="primary", use_container_width=True)
 
         if login_submitted:
             username = admin_username.strip()
@@ -224,6 +258,18 @@ with st.sidebar:
                     log_system_event("AUTH LOGIN", "Login portal berhasil", operator["username"])
                     st.success("Login Admin berhasil.")
                     st.rerun()
+
+    st.divider()
+    st.caption("Internet management system")
+    current_plan = get_active_plan()
+    selected_mode = st.segmented_control(
+        "Internet mode",
+        ["LIMITED", "UNLIMITED"],
+        default=current_plan["mode"],
+    )
+    if selected_mode and selected_mode != current_plan["mode"]:
+        set_internet_mode(selected_mode)
+        st.rerun()
 
     st.caption("Local data · RouterOS connection enabled when configured")
 
