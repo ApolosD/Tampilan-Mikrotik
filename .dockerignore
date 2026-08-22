@@ -1,0 +1,14 @@
+.git
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+.env
+.streamlit/secrets.toml
+data/database/*.db
+data/exports/*
+data/backups/*
+Dashboard Mikrotik/
