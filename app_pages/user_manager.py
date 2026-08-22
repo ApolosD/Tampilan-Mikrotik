@@ -62,22 +62,24 @@ with st.container(border=True):
     if not visible_users:
         st.info("Belum ada hotspot user di RouterOS.")
     else:
-        header = st.columns([1.6, 1, 1, 1, 1, 0.9])
-        for col, label in zip(header, ["User", "Profile", "Quota", "Status", "Uptime limit", "Action"]):
-            col.markdown(f"**{label}**")
+        st.caption("Geser ke samping di HP untuk melihat kolom Action.")
+        with st.container(key="admin-actions-user-manager"):
+            header = st.columns([1.6, 1, 1, 1, 1, 0.9])
+            for col, label in zip(header, ["User", "Profile", "Quota", "Status", "Uptime limit", "Action"]):
+                col.markdown(f"**{label}**")
 
-        for item in visible_users:
-            row = st.columns([1.6, 1, 1, 1, 1, 0.9])
-            row[0].write(item["username"])
-            row[1].write(item.get("profile") or "-")
-            row[2].write(format_gb(item["quota_gb"]) if item["quota_gb"] else "Unlimited")
-            row[3].write("BLOCKED" if item.get("disabled") else ("ONLINE" if item["is_online"] else "OFFLINE"))
-            row[4].write(item.get("uptime") or "-")
-            if row[5].button("Delete", key=f"delete_{item['username']}"):
-                try:
-                    delete_hotspot_user(item["username"])
-                    log_system_event("USER DELETE", f"Hotspot user {item['username']} deleted", operator_name)
-                    st.success(f"User {item['username']} dihapus.")
-                    st.rerun()
-                except (ValueError, RuntimeError) as error:
-                    st.error(str(error))
+            for item in visible_users:
+                row = st.columns([1.6, 1, 1, 1, 1, 0.9])
+                row[0].write(item["username"])
+                row[1].write(item.get("profile") or "-")
+                row[2].write(format_gb(item["quota_gb"]) if item["quota_gb"] else "Unlimited")
+                row[3].write("BLOCKED" if item.get("disabled") else ("ONLINE" if item["is_online"] else "OFFLINE"))
+                row[4].write(item.get("uptime") or "-")
+                if row[5].button("Delete", key=f"delete_{item['username']}"):
+                    try:
+                        delete_hotspot_user(item["username"])
+                        log_system_event("USER DELETE", f"Hotspot user {item['username']} deleted", operator_name)
+                        st.success(f"User {item['username']} dihapus.")
+                        st.rerun()
+                    except (ValueError, RuntimeError) as error:
+                        st.error(str(error))

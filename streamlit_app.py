@@ -215,6 +215,10 @@ st.markdown(
     }
     .responsive-table { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 12px; }
     .responsive-table table { min-width: 680px; }
+    /* Admin action rows (buttons per column) need to scroll sideways on phones instead of wrapping. */
+    [class*="st-key-admin-actions"] { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 12px; padding-bottom: .35rem; }
+    [class*="st-key-admin-actions"] [data-testid="stHorizontalBlock"] { flex-wrap: nowrap !important; min-width: 760px; gap: .6rem !important; }
+    [class*="st-key-admin-actions"] [data-testid="stHorizontalBlock"] > div { min-width: 90px !important; flex: 1 1 auto !important; }
     @media (max-width: 768px) {
         section.main > div { padding: 1rem .7rem 2.5rem; }
         h1 { font-size: 2rem; line-height: 1.08; }

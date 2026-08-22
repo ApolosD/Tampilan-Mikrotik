@@ -54,30 +54,32 @@ if not records:
     st.info("No records available.")
     st.stop()
 
-header = st.columns([1.1, 1, 1, 0.9, 0.7, 0.7, 1, 0.9, 0.7, 0.7])
-for col, label in zip(header, ["User", "IP address", "MAC address", "Uptime", "RX", "TX", "Session data", "Profile", "Kick", "Block"]):
-    col.markdown(f"**{label}**")
+st.caption("Geser ke samping di HP untuk melihat kolom Kick / Block.")
+with st.container(key="admin-actions-active-users"):
+    header = st.columns([1.1, 1, 1, 0.9, 0.7, 0.7, 1, 0.9, 0.7, 0.7])
+    for col, label in zip(header, ["User", "IP address", "MAC address", "Uptime", "RX", "TX", "Session data", "Profile", "Kick", "Block"]):
+        col.markdown(f"**{label}**")
 
-for record in records:
-    row = st.columns([1.1, 1, 1, 0.9, 0.7, 0.7, 1, 0.9, 0.7, 0.7])
-    row[0].write(record["User"])
-    row[1].write(record["IP address"])
-    row[2].write(record["MAC address"])
-    row[3].write(record["Uptime"])
-    row[4].write(record["RX rate"])
-    row[5].write(record["TX rate"])
-    row[6].write(record["Session data"])
-    row[7].write(record["Profile"])
+    for record in records:
+        row = st.columns([1.1, 1, 1, 0.9, 0.7, 0.7, 1, 0.9, 0.7, 0.7])
+        row[0].write(record["User"])
+        row[1].write(record["IP address"])
+        row[2].write(record["MAC address"])
+        row[3].write(record["Uptime"])
+        row[4].write(record["RX rate"])
+        row[5].write(record["TX rate"])
+        row[6].write(record["Session data"])
+        row[7].write(record["Profile"])
 
-    if row[8].button("Kick", key=f"kick_{record['username']}"):
-        removed = kick_user(record["username"])
-        log_system_event("USER KICK", f"Kicked {record['username']} ({removed} session)", operator_name)
-        st.success(f"{record['username']} disconnected.")
-        st.rerun()
+        if row[8].button("Kick", key=f"kick_{record['username']}"):
+            removed = kick_user(record["username"])
+            log_system_event("USER KICK", f"Kicked {record['username']} ({removed} session)", operator_name)
+            st.success(f"{record['username']} disconnected.")
+            st.rerun()
 
-    block_label = "Unblock" if record["blocked"] else "Block"
-    if row[9].button(block_label, key=f"block_{record['username']}"):
-        set_user_blocked(record["username"], not record["blocked"])
-        log_system_event("USER BLOCK", f"{block_label} {record['username']}", operator_name)
-        st.success(f"{record['username']} {block_label.lower()}ed.")
-        st.rerun()
+        block_label = "Unblock" if record["blocked"] else "Block"
+        if row[9].button(block_label, key=f"block_{record['username']}"):
+            set_user_blocked(record["username"], not record["blocked"])
+            log_system_event("USER BLOCK", f"{block_label} {record['username']}", operator_name)
+            st.success(f"{record['username']} {block_label.lower()}ed.")
+            st.rerun()
