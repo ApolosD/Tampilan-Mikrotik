@@ -21,6 +21,49 @@ def _find_ap_flow(snapshot: dict, ap_name: str) -> dict | None:
     return None
 
 
+def _select_chart_sources(snapshot: dict, ap_rows_data: list) -> list[dict]:
+    selected: list[dict] = []
+    used_labels: set[str] = set()
+
+    # Primary mapping: use AP names from local inventory and match against RouterOS interfaces.
+    for row in ap_rows_data[:3]:
+        label = str(row["name"])
+        flow = _find_ap_flow(snapshot, label)
+        if flow is not None:
+            selected.append({"label": label, "flow": flow, "source": "mapped"})
+            used_labels.add(label)
+
+    interfaces = snapshot.get("interfaces", [])
+    preferred = []
+    fallback = []
+    for row in interfaces:
+        name = str(row.get("name", "")).strip()
+        if not name:
+            continue
+        upper_name = name.upper()
+        if upper_name in {"ETHER1", "BRIDGE", "LO"}:
+            continue
+        if any(token in upper_name for token in ("AP", "WLAN", "WIFI")):
+            preferred.append(name)
+        else:
+            fallback.append(name)
+
+    # Fallback mapping: use likely AP/wireless interfaces from RouterOS directly.
+    for name in preferred + fallback:
+        if len(selected) >= 3:
+            break
+        label = name
+        if label in used_labels:
+            continue
+        flow = interface_flow(snapshot, name)
+        if flow is None:
+            continue
+        selected.append({"label": label, "flow": flow, "source": "fallback"})
+        used_labels.add(label)
+
+    return selected
+
+
 def _traffic_mbps(current: dict | None, previous: dict | None, elapsed_seconds: float) -> float:
     if not current or elapsed_seconds <= 0:
         return 0.0
@@ -251,10 +294,19 @@ with st.container(border=True):
             st.info("Grafik AP akan aktif setelah koneksi RouterOS ONLINE.")
             return
 
-        labels = [str(row["name"]) for row in ap_rows[:3]]
+        chart_sources = _select_chart_sources(snapshot, ap_rows)
+        labels = [item["label"] for item in chart_sources]
         if not labels:
             st.info("Belum ada data Access Point di database lokal.")
             return
+
+        source_types = {item["source"] for item in chart_sources}
+        if source_types == {"mapped"}:
+            st.caption("Sumber interface: AP mapping dari inventory lokal.")
+        elif "mapped" in source_types:
+            st.caption("Sumber interface: kombinasi AP mapping dan fallback interface RouterOS.")
+        else:
+            st.caption("Sumber interface: fallback interface RouterOS (nama AP lokal belum match).")
 
         now = monotonic()
         previous_time = st.session_state.get("ap_graph_time", now)
@@ -263,8 +315,9 @@ with st.container(border=True):
 
         sample = {}
         current_flows = {}
-        for label in labels:
-            flow = _find_ap_flow(snapshot, label)
+        for source in chart_sources:
+            label = source["label"]
+            flow = source["flow"]
             current_flows[label] = flow
             sample[label] = _traffic_mbps(flow, previous_flows.get(label), elapsed_seconds)
 
@@ -281,9 +334,6 @@ with st.container(border=True):
             history.append({name: 0.0 for name in labels})
         history.append(sample)
         del history[:-60]
-
-        if all(current_flows.get(name) is None for name in labels):
-            st.warning("Interface AP belum terpetakan di RouterOS. Grafik tampil dengan baseline sampai interface AP terdeteksi.")
 
         chart_data = {label: [row.get(label, 0.0) for row in history] for label in labels}
         st.line_chart(chart_data, use_container_width=True, height=280)
