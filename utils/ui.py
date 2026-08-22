@@ -14,7 +14,7 @@ def render_records(records: list[dict[str, Any]]) -> None:
     header_html = "".join(f"<th>{escape(str(header))}</th>" for header in headers)
     rows_html = "".join(
         "<tr>"
-        + "".join(f"<td>{escape(str(record.get(header, "")))}</td>" for header in headers)
+        + "".join(f"<td>{escape(str(record.get(header, '')))}</td>" for header in headers)
         + "</tr>"
         for record in records
     )
