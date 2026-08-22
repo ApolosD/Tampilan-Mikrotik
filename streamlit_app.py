@@ -87,6 +87,9 @@ st.markdown(
     [data-testid="stSidebarHeader"] { order: 0; }
     [data-testid="stSidebarUserContent"] { order: 1; }
     [data-testid="stSidebarNav"] { order: 2; }
+    /* This padding was meant for trailing space at the sidebar bottom; now it sits before the nav, so trim it. */
+    [data-testid="stSidebarUserContent"] { padding-top: 0.5rem !important; padding-bottom: 0.25rem !important; }
+    [data-testid="stSidebarUserContent"] [data-testid="stVerticalBlock"] { gap: 0.5rem !important; }
     h1, h2, h3 { color: var(--ink); letter-spacing: -.01em; }
     h1 {
         font-family: "Cambria", "Times New Roman", serif;
