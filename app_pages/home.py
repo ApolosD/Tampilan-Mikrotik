@@ -143,8 +143,6 @@ total_gb = float(plan["total_quota_gb"])
 remaining_gb = max(total_gb - used_gb, 0)
 blocked_count = sum(status.status == "BLOCKED" for status in statuses) if plan["mode"] == "LIMITED" else sum(row["status"] == "SUSPENDED" for row in crew_rows)
 online_count = len(live["active_users"]) if connection_status["status"] == "ONLINE" else sum(row["status"] == "ONLINE" for row in crew_rows)
-overview_sources = _select_chart_sources(live, ap_rows)
-bandwidth_source_count = len(overview_sources)
 
 with st.container(horizontal=True):
     st.metric("MikroTik", connection_status["status"], border=True)
@@ -153,13 +151,11 @@ with st.container(horizontal=True):
     if plan["mode"] == "LIMITED":
         st.metric("Master quota", format_gb(total_gb), border=True)
         st.metric("Remaining", format_gb(remaining_gb), border=True)
-    else:
-        st.metric("Network policy", "No quota cap", border=True)
-        st.metric("Sources", f"{bandwidth_source_count} interfaces", border=True)
     live_ap_count = sum(flow is not None and flow["running"] and not flow["disabled"] for flow in ap_flows)
     live_ap_total = len(ap_flows) if ap_flows else len(ap_rows)
     st.metric("AP online", f"{live_ap_count}/{live_ap_total}", border=True)
-    st.metric("Blocked", blocked_count, border=True)
+    if blocked_count > 0:
+        st.metric("Blocked", blocked_count, border=True)
 
 left, right = st.columns(2)
 with left:
