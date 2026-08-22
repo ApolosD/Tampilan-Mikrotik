@@ -82,6 +82,11 @@ st.markdown(
     }
     [data-testid="stSidebar"] * { color: #edf4fa !important; }
     [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p { color: #c0d3e1 !important; }
+    /* Streamlit always renders stSidebarNav before stSidebarUserContent; force our content first. */
+    [data-testid="stSidebarContent"] { display: flex; flex-direction: column; }
+    [data-testid="stSidebarHeader"] { order: 0; }
+    [data-testid="stSidebarUserContent"] { order: 1; }
+    [data-testid="stSidebarNav"] { order: 2; }
     h1, h2, h3 { color: var(--ink); letter-spacing: -.01em; }
     h1 {
         font-family: "Cambria", "Times New Roman", serif;
