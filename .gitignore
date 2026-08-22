@@ -7,3 +7,4 @@ data/database/*.db
 data/exports/*
 data/backups/*
 .pytest_cache/
+Dashboard Mikrotik/
