@@ -67,14 +67,38 @@ def _select_chart_sources(snapshot: dict, ap_rows_data: list) -> list[dict]:
 
 
 def _traffic_mbps(current: dict | None, previous: dict | None, elapsed_seconds: float) -> float:
-    if not current or elapsed_seconds <= 0:
+    # No baseline yet (first sample after (re)start): report 0 instead of the whole counter total.
+    if not current or previous is None or elapsed_seconds <= 0:
         return 0.0
-    prev_rx = float(previous.get("rx_bytes", 0.0)) if previous else 0.0
-    prev_tx = float(previous.get("tx_bytes", 0.0)) if previous else 0.0
+    prev_rx = float(previous.get("rx_bytes", 0.0))
+    prev_tx = float(previous.get("tx_bytes", 0.0))
     current_rx = float(current.get("rx_bytes", 0.0))
     current_tx = float(current.get("tx_bytes", 0.0))
     delta_bytes = max((current_rx - prev_rx) + (current_tx - prev_tx), 0.0)
     return round((delta_bytes * 8.0) / (elapsed_seconds * 1_000_000), 3)
+
+
+def _choose_throughput_unit(max_mbps: float) -> str:
+    if max_mbps < 1:
+        return "Kbps"
+    if max_mbps < 1000:
+        return "Mbps"
+    return "Gbps"
+
+
+def _convert_mbps(mbps: float, unit: str) -> float:
+    if unit == "Kbps":
+        return mbps * 1000
+    if unit == "Gbps":
+        return mbps / 1000
+    return mbps
+
+
+def _format_throughput(mbps: float) -> str:
+    unit = _choose_throughput_unit(mbps)
+    value = _convert_mbps(mbps, unit)
+    decimals = 1 if unit in ("Kbps", "Gbps") else 2
+    return f"{value:.{decimals}f} {unit}"
 
 
 def _to_float(value: object) -> float:
@@ -248,46 +272,56 @@ with st.container(border=True):
         live_cols = st.columns(len(labels))
         for col, label in zip(live_cols, labels):
             with col:
-                col.metric(label, f"{sample[label]:.3f} Mbps", border=True)
+                col.metric(label, _format_throughput(sample[label]), border=True)
 
         total_current = sum(sample.values())
         top_label = max(sample, key=sample.get)
         top_value = sample[top_label]
         history_peak = max((max(row.get(label, 0.0) for label in labels) for row in history), default=0.0)
         summary_left, summary_mid, summary_right = st.columns(3)
-        summary_left.metric("Current total", f"{total_current:.3f} Mbps", border=True)
-        summary_mid.metric("Peak (last 60)", f"{history_peak:.3f} Mbps", border=True)
-        summary_right.metric("Top AP now", f"{top_label} · {top_value:.3f} Mbps", border=True)
+        summary_left.metric("Current total", _format_throughput(total_current), border=True)
+        summary_mid.metric("Peak (last 60)", _format_throughput(history_peak), border=True)
+        summary_right.metric("Top AP now", f"{top_label} · {_format_throughput(top_value)}", border=True)
 
         st.session_state.ap_graph_previous_flows = current_flows
         st.session_state.ap_graph_time = now
 
+        chart_unit = _choose_throughput_unit(history_peak)
+        chart_decimals = 1 if chart_unit in ("Kbps", "Gbps") else 2
         chart_points = []
         for index, row in enumerate(history):
             for label in labels:
-                chart_points.append({"sample": index, "ap": label, "mbps": row.get(label, 0.0)})
+                value = _convert_mbps(row.get(label, 0.0), chart_unit)
+                chart_points.append({"sample": index, "ap": label, "value": value, "display": f"{value:.{chart_decimals}f} {chart_unit}"})
 
         chart = (
             alt.Chart(alt.Data(values=chart_points))
-            .mark_line(strokeWidth=3, interpolate="monotone")
+            .mark_area(line={"strokeWidth": 3}, interpolate="monotone", opacity=0.18)
             .encode(
-                x=alt.X("sample:Q", title="Sample (5s interval)"),
-                y=alt.Y("mbps:Q", title="Throughput (Mbps)", scale=alt.Scale(zero=True)),
+                x=alt.X("sample:Q", title="Waktu (interval 5 detik)", axis=alt.Axis(grid=False)),
+                y=alt.Y("value:Q", title=f"Throughput ({chart_unit})", scale=alt.Scale(zero=True, nice=True)),
                 color=alt.Color(
                     "ap:N",
                     title="Access point",
-                    scale=alt.Scale(range=["#0b6efd", "#14b8a6", "#f97316", "#ef4444", "#8b5cf6"]),
+                    scale=alt.Scale(range=["#2f6fed", "#12b3a8", "#f2994a", "#eb5757", "#9b6bf2"]),
                 ),
                 tooltip=[
                     alt.Tooltip("ap:N", title="AP"),
                     alt.Tooltip("sample:Q", title="Sample"),
-                    alt.Tooltip("mbps:Q", title="Mbps", format=".3f"),
+                    alt.Tooltip("display:N", title="Throughput"),
                 ],
             )
-            .properties(height=320)
-            .configure_view(stroke="#d7e6f5", fill="#f8fbff")
-            .configure_axis(labelColor="#2b3e50", titleColor="#2b3e50", gridColor="#e5eef8", domainColor="#c8d8e9")
-            .configure_legend(labelColor="#2b3e50", titleColor="#2b3e50", orient="bottom")
+            .properties(height=340)
+            .configure_view(stroke="transparent", fill="#fbfdff", cornerRadius=12)
+            .configure_axis(
+                labelColor="#4a5b6c",
+                titleColor="#2b3e50",
+                titleFontWeight=600,
+                gridColor="#e9f0f7",
+                domainColor="#d3e0ec",
+                labelFontSize=11,
+            )
+            .configure_legend(labelColor="#2b3e50", titleColor="#2b3e50", orient="bottom", symbolType="stroke")
         )
         st.altair_chart(chart, use_container_width=True)
 
